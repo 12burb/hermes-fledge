@@ -51,7 +51,8 @@ class HermesBridge:
         probes = {
             "write origin": ("tools.skill_provenance", "get_current_write_origin"),
             "pending queue": ("tools.write_approval", "stage_write"),
-            "archive / lock": ("tools.skill_usage", "set_locked"),
+            "archive": ("tools.skill_usage", "archive_skill"),
+            "content lock": ("tools.skill_usage", "set_locked"),  # Hermes >= 0.22.7 (hermes curator lock)
             "skill lookup": ("tools.skills_tool", "locate_skill"),
             "plugin storage": ("plugins.plugin_storage", "plugin_db"),
         }
@@ -238,7 +239,7 @@ class HermesBridge:
             record = get_record(name)
             return str(record.get("created_by") or "") if isinstance(record, dict) else ""
         except Exception as exc:
-            self._fail("archive / lock", exc)
+            self._fail("archive", exc)
             return ""
 
     def archive_skill(self, name: str) -> tuple[bool, str]:
@@ -247,7 +248,7 @@ class HermesBridge:
             ok, message = archive_skill(name)
             return bool(ok), str(message)
         except Exception as exc:
-            self._fail("archive / lock", exc)
+            self._fail("archive", exc)
             return False, f"archive unavailable: {exc}"
 
     def set_locked(self, name: str, locked: bool) -> bool:
@@ -259,7 +260,7 @@ class HermesBridge:
             from tools.skill_usage import set_locked
             return bool(set_locked(key, locked))
         except Exception as exc:
-            self._fail("archive / lock", exc)
+            self._fail("content lock", exc)
             return False
 
     # -- storage -----------------------------------------------------------------------------------------

@@ -53,3 +53,28 @@ def test_unattended_detection_from_session_env(monkeypatch):
     monkeypatch.delenv("HERMES_CRON_SESSION")
     monkeypatch.setenv("HERMES_SESSION_PLATFORM", "api_server")
     assert bridge.is_unattended() is True
+
+
+def test_missing_content_lock_degrades_only_that_feature(monkeypatch):
+    """Hermes < 0.22.7 has archive_skill but no set_locked (``hermes curator lock`` came in 0.22.7): the
+    doctor must report the lock alone as degraded, and archiving keeps working."""
+    import sys
+    import types
+
+    tools = types.ModuleType("tools")
+    tools.__path__ = []
+    usage = types.ModuleType("tools.skill_usage")
+    usage.archive_skill = lambda name: (True, f"archived {name}")
+    usage.get_record = lambda name: {"created_by": "agent"}
+    tools.skill_usage = usage
+    monkeypatch.setitem(sys.modules, "tools", tools)
+    monkeypatch.setitem(sys.modules, "tools.skill_usage", usage)
+
+    bridge = HermesBridge()
+    caps = bridge.capabilities()
+    assert caps["archive"] == "ok"
+    assert caps["content lock"] != "ok" and "set_locked" in caps["content lock"]
+    assert bridge.archive_skill("x") == (True, "archived x")
+    assert bridge.created_by("x") == "agent"
+    assert bridge.set_locked("x", True) is False
+    assert "content lock" in bridge._failures and "archive" not in bridge._failures
