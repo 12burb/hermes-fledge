@@ -1,7 +1,7 @@
 name: fledge
 title: Fledge
 repo: https://github.com/OWNER/hermes-fledge
-sha: 0000000000000000000000000000000000000000
+sha: "0000000000000000000000000000000000000000"  # quoted: an all-digit sha would parse as a number
 version: "0.1.0"
 description: >-
   Skills have to earn their wings. Before Hermes saves or rewrites a skill, Fledge checks what actually
@@ -14,14 +14,16 @@ description: >-
   start on probation: clean real runs graduate them, repeated bad runs ground them, and a save from a run
   the user corrected right after is grounded at once; a grounded skill Hermes created on its own is
   archived (hermes curator restore brings it back), skills the user asked for are only reported. Skills
-  the user edited by hand are fingerprinted, and autonomous rewrites of them become proposals in the same
-  queue (optionally Hermes' content lock). Modes: enforce, watch (records only), off. Disclosure — nine
+  the user edited by hand are fingerprinted, and autonomous rewrites or deletes of them become proposals in
+  the same queue (optionally Hermes' content lock). Modes: enforce, watch (records only), off. Disclosure — nine
   hooks (pre_llm_call, pre_tool_call, post_tool_call, on_session_end, on_session_finalize,
   on_session_reset, on_skill_lifecycle, pre_command, post_approval_response); pre_tool_call blocks or asks
-  for approval on skill_manage only and fails open on its own errors; reads hook payloads (tool statuses
+  for approval on skill_manage only and lets the write through on its own errors; reads hook payloads (tool statuses
   and error text, the first 280 characters of the next user message) and skill folders to fingerprint
   them; writes its own SQLite under plugin-data/fledge (skill names, fingerprints, verdict reasons,
-  session/turn ids, no message text or skill content), held writes into pending/skills/, and archives
+  session/turn ids; reasons quote the matched correction phrase and up to 80 characters of a tool error,
+  hold summaries the skill's one-line description; no other message text, no skill bodies), held writes
+  into pending/skills/, and archives
   grounded agent-created skills into skills/.archive/; calls tools.skill_provenance, tools.write_approval
   and tools.skill_usage (the functions behind /skills pending and hermes curator archive/lock) because no
   public seam exists yet, each guarded; no network, no model calls, no credentials, no shell commands,

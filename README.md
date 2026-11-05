@@ -2,7 +2,7 @@
 
 **Skills have to earn their wings.**
 
-Hermes learns from its own work: after a task it writes the procedure down as a skill and reuses it next time. The catch is who grades the work. The most-upvoted Hermes complaint in Kilo's read of 1,300+ r/openclaw comments was a user saying *"It always thinks it did a good job."* A skill learned from a run that quietly went wrong carries the mistake forward, and the next "self-improvement" can overwrite the skill you spent an evening tuning.
+Hermes learns from its own work: after a task it writes the procedure down as a skill and reuses it next time. The catch is who grades the work. In [Kilo's read of 1,300+ r/openclaw comments](https://kilo.ai/openclaw/vs-hermes), the first thing listed under what people dislike about Hermes is that self-evaluation always passes, quoting a user: *"It always thinks it did a good job. ALWAYS."* A skill learned from a run that quietly went wrong carries the mistake forward, and the next "self-improvement" can overwrite the skill you spent an evening tuning.
 
 Fledge takes the grading away from the agent. Before Hermes saves or rewrites a skill, Fledge looks at what actually happened in the run it learned from. No model grades the model.
 
@@ -10,7 +10,7 @@ Fledge takes the grading away from the agent. Before Hermes saves or rewrites a 
 |---|---|
 | **Save gate** | A skill learned from a run that went wrong is **held** in Hermes' own review queue instead of going live. You see why, then keep it or drop it. |
 | **Probation** | New and rewritten skills start as **fledglings**. Clean real runs graduate them; runs that keep going wrong **ground** them (archived, recoverable). A save from a run you corrected right after is grounded at once. |
-| **Hand-edit protection** | Skills you edited by hand stop being overwritten. Autonomous rewrites of them become **proposals** you approve or reject. |
+| **Hand-edit protection** | Skills you edited by hand stop being overwritten. Autonomous rewrites or deletes of them become **proposals** you approve or reject. |
 
 ## How it decides
 
@@ -20,9 +20,9 @@ Fledge only uses facts Hermes reports through plugin hooks:
 |---|---|
 | The turn ended in an error | 3 |
 | The turn was interrupted | 2 |
-| Your next message corrects the agent ("that's wrong", "not what I asked", "still broken"…) | 3 (a softer "try again" / "not quite" is 1) |
+| Your next message corrects the agent ("that's wrong", "not what I asked", "still broken"…) | 3 (a softer "try again" / "not quite", or a bare "No.", is 1) |
 | You ran `/undo` or restored a `/rollback` right after (`/retry`: 2) | 3 |
-| A task tool was still failing when the turn ended (terminal, code, file writes, browser, MCP) | 2 each |
+| A task tool was still failing when the turn ended (terminal, code, file writes, browser, MCP; terminal is judged per program, so a later `rm tmp.txt` does not "recover" a failed `./fetch.sh`) | 2 each |
 | …and it failed two or more times in a row without recovering | +1 |
 | Any other tool still failing at the end | 1 each (tool failures max 4 in total) |
 | You denied an action at an approval prompt | 1 each, max 2 |
@@ -62,6 +62,8 @@ Holds live in Hermes' own pending queue, so `/skills pending` in the CLI lists t
 
 ## Install
 
+Requires Hermes **0.22.7 or newer**.
+
 ```bash
 hermes plugins install <owner>/hermes-fledge --enable
 hermes fledge scan      # optional: fingerprint existing skills so later hand edits are recognized
@@ -84,7 +86,7 @@ Want to see what it would do before it does anything? `/fledge mode watch` recor
 | `graduate_after` | `3` | clean runs a new skill needs (plus one per bad run) |
 | `ground_after` | `2` | bad runs on probation that ground a skill |
 | `auto_archive` | `true` | archive grounded skills Hermes created on its own (skills you asked for are only reported) |
-| `protect_hand_edits` | `true` | turn autonomous rewrites of hand-edited skills into proposals |
+| `protect_hand_edits` | `true` | turn autonomous rewrites and deletes of hand-edited skills into proposals |
 | `on_hand_edit` | `protect` | `lock` also sets Hermes' content lock (`hermes curator lock`), which stops every agent edit |
 | `foreground_bad_run` | `approve` | foreground save after errors: `approve` (ask) · `stage` · `allow` |
 | `notify` | `true` | chat notices |
@@ -111,7 +113,7 @@ Want to see what it would do before it does anything? `/fledge mode watch` recor
 Nine hooks, no tools, no patches to Hermes code:
 
 - `pre_llm_call`, `post_tool_call`, `on_session_end`, `on_session_finalize`, `on_session_reset`, `pre_command`, `post_approval_response` — record what happened in each foreground turn (tool statuses, turn outcome, your follow-up, `/undo`, denials). Turns of the background-review and side-question forks are ignored.
-- `pre_tool_call` on `skill_manage` — the save gate. It returns Hermes' documented `block` (held) or `approve` (ask you) directive. On an internal error it **fails open**: a Fledge bug never stops Hermes from saving skills.
+- `pre_tool_call` on `skill_manage` — the save gate. It returns Hermes' documented `block` (held) or `approve` (ask you) directive. On its own errors it **fails open**: a Fledge exception never stops Hermes from saving skills. (Hermes itself blocks the tool call if any `pre_tool_call` callback hangs past `plugins.hook_callback_timeout`, 30 s by default; Fledge's gate does a few local SQLite reads and returns in milliseconds.)
 - `on_skill_lifecycle` — writes that landed (start probation), skill loads (count real runs), archive/restore.
 
 Where no public plugin seam exists yet, Fledge calls the same functions Hermes' own commands use, all in [`bridge.py`](bridge.py) and each guarded so a moved function disables one feature instead of breaking the agent: the skill write origin (`tools.skill_provenance`), the pending queue (`tools.write_approval.stage_write`, the backend of `/skills pending`), and curator actions (`tools.skill_usage.archive_skill` / `set_locked`, the backend of `hermes curator archive` / `lock`). `hermes plugins validate` lists these imports as warnings; a public `ctx` seam for them is the obvious follow-up.
@@ -119,7 +121,7 @@ Where no public plugin seam exists yet, Fledge calls the same functions Hermes' 
 ## Disclosure
 
 - **Reads:** hook payloads (tool names, statuses and error text, turn outcome, the first 280 characters of your next message to spot a correction), and skill folders, to fingerprint them.
-- **Writes:** its own SQLite file `<HERMES_HOME>/plugin-data/fledge/data.db` (skill names, fingerprints, verdict reasons, session/turn ids; never message text or skill content), held writes into Hermes' pending queue `<HERMES_HOME>/pending/skills/`, and — only for skills Hermes created on its own that get grounded — an archive move into `skills/.archive/` (undo with `hermes curator restore NAME`). With `on_hand_edit: lock`, Hermes' content-lock flag.
+- **Writes:** its own SQLite file `<HERMES_HOME>/plugin-data/fledge/data.db` (skill names, fingerprints, verdict reasons, session/turn ids). Verdict reasons quote short excerpts: the matched correction phrase (up to 60 characters) and a failing tool's error text (up to 80); hold summaries include the skill's one-line `description`. No other message text and no skill bodies. held writes into Hermes' pending queue `<HERMES_HOME>/pending/skills/`, and — only for skills Hermes created on its own that get grounded — an archive move into `skills/.archive/` (undo with `hermes curator restore NAME`). With `on_hand_edit: lock`, Hermes' content-lock flag.
 - **Never:** network calls, model calls, credentials, shell commands, background processes, telemetry.
 - **Approvals:** Fledge only adds friction. It can block a skill write or ask you about it through Hermes' approval prompt; it never approves anything, and asks are queued instead of waiting when nobody can answer (cron, kanban, API).
 
@@ -129,11 +131,13 @@ Where no public plugin seam exists yet, Fledge calls the same functions Hermes' 
 - Correction detection is a phrase list over the start of your next message, tuned to miss rather than misfire (a casual "no worries" never counts).
 - Hand edits are detected by fingerprint: Fledge knows a skill's last agent-written state once it has seen the agent write it (or after `hermes fledge scan`). An edit made through a shell command by the agent also looks like a hand edit; that errs on the side of protecting the skill.
 - Turn evidence lives in memory; a restart forgets runs in flight (probation counts already recorded are kept).
+- Tool status is what Hermes reports. A compound shell command (`./fetch.sh; rm tmp`) reports the exit status of its last part, so a failure earlier in it is not seen. Fledge does not guess from output text.
+- Deletes are protected only for hand-edited skills; a hand edit made before Fledge saw the skill is recognized after `hermes fledge scan`.
 
 ## Development
 
 ```bash
-python -m pytest tests          # 93 tests, no Hermes install needed (Hermes surfaces are faked)
+python -m pytest tests          # 124 tests, no Hermes install needed (Hermes surfaces are faked)
 hermes plugins doctor . --ci    # real discovery, register(), hooks — in a temp HERMES_HOME
 hermes plugins validate .       # catalog admission checks
 ```

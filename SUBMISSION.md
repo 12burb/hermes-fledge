@@ -1,61 +1,71 @@
 # Shipping Fledge to the Hermes Agent Plugin Hackathon
 
-Deadline: **November 11, 2026**. Submission = a pull request adding the catalog entry, plus a demo video.
-Judged on usefulness, reliability and creativity; accepted entries are listed in the Hermes Marketplace.
+Checked against the official sources on 2026-11-05:
+[the announcement](https://nousresearch.com/) (Nous Research, Nov 5),
+[Submitting to the Plugin Catalog](https://hermes-agent.nousresearch.com/docs/developer-guide/plugins/catalog-submission)
+and `plugin-catalog/README.md` on `NousResearch/hermes-agent` `main` (entry schema identical to v0.22.7).
 
-## 1. Publish the repo (day 1)
+- **Deadline: 5 PM EST, Tuesday Nov 11, 2026** (= 4 PM CST, 22:00 UTC).
+- **Entry = three things:** (1) a PR adding `plugin-catalog/fledge.yaml`, (2) a demo video posted on X
+  tagging @NousResearch, **under 90 seconds**, showing the plugin working, (3) both links in the form
+  <https://form.typeform.com/to/FwJLvOln>. The form can be sent as soon as the PR is open.
+- **Judging:** usefulness, reliability, polish and creativity; judges favor plugins that do more than a prompt
+  or a skill could. Catalog CI runs once a maintainer starts it; entries are reviewed every few days.
+- Accepted entries are listed in the Hermes Marketplace (`hermes-agent.nousresearch.com/marketplace`).
+
+## 1. Publish the repo
 
 ```bash
 cd hermes-fledge
-git init && git add . && git commit -m "Fledge 0.1.0"
-gh repo create hermes-fledge --public --source . --push
+gh repo create OWNER/hermes-fledge --public --source . --push \
+  --description "Skills have to earn their wings: evidence-gated skill saves for Hermes Agent"
 ```
 
-Then replace `OWNER` in `catalog/fledge.yaml` with your GitHub handle (and add `homepage:` to `plugin.yaml`).
+Before pushing: every commit is authored with the GitHub no-reply address
+(`git log --format='%an <%ae>' | sort -u`), `OWNER` is filled in `catalog/fledge.yaml` and `plugin.yaml`
+(`homepage:`), and the working tree is clean.
 
-## 2. Validate against real Hermes (day 1–2)
-
-The test suite fakes the Hermes surfaces; these checks run the real loader. Use the newest Hermes release.
+From that moment the plugin is installable by anyone on Hermes >= 0.22.7, catalog or not:
 
 ```bash
-hermes --version                                  # set requires_hermes to this release if it is newer than 0.22.7
-python -m pytest tests                            # expect 93 passed (also try Python 3.11 and 3.14)
-hermes plugins doctor . --ci                      # discovery, register(), hook names, **kwargs
-hermes plugins validate . --install-deps          # the exact check catalog CI runs
+hermes plugins install OWNER/hermes-fledge --enable
 ```
 
-Expected `validate` warnings, by design: imports of undocumented core modules `tools.skill_provenance`,
-`tools.write_approval`, `tools.skill_usage` (beyond the documented `read_skill_name`) and
-`hermes_cli.write_approval_commands`. (`tools.skills_tool`, `tools.skills_sync.dir_hash`,
-`gateway.session_context` and `plugins.plugin_storage` are documented plugin surfaces.) The README and PR
-explain each. Anything else, especially a `security scan` or `no core override` finding, gets fixed
-before the PR.
-
-Smoke test in an isolated home, with a real session:
+## 2. Validate against real Hermes (done: see VALIDATION.md)
 
 ```bash
-export HERMES_HOME=$(mktemp -d)                   # throwaway profile
-hermes setup                                      # pick a model
-hermes plugins install "$PWD" --enable            # local path install
-hermes chat                                       # then follow DEMO.md beat 1
-hermes fledge status && hermes fledge export
+python -m pytest tests                       # all pass, no Hermes needed
+hermes plugins doctor . --ci                 # discovery, register(), hooks
+hermes plugins validate . --install-deps     # the check catalog CI runs
+python scripts/validate_plugin_catalog.py plugin-catalog/fledge.yaml   # inside a hermes-agent checkout
 ```
 
-Watch for: `/fledge doctor` all `ok`; the hold notice appearing; `/skills pending` (CLI) listing the
-`[fledge]` entry; `/fledge approve ID` saving the skill.
+Expected `validate` warnings, by design: private core imports of `tools.skill_provenance`,
+`tools.write_approval`, `tools.skill_usage` (beyond `read_skill_name`) and
+`hermes_cli.write_approval_commands`. Everything else passes, including `security scan — safe` and
+`no core override`.
 
-## 3. Record the video (day 3–5)
-
-Follow `DEMO.md`. Real session, real failures, about 90 seconds. Post it to X and keep the link for the PR.
-
-## 4. Open the catalog PR (day 5–6)
+Local development install (Hermes 0.22.7 does not install from a local path or a `file://` URL):
 
 ```bash
-git rev-parse HEAD                                # the 40-character sha to pin
+git clone <this repo> "$HERMES_HOME/plugins/fledge"
+hermes plugins adopt fledge && hermes plugins enable fledge
 ```
 
-Fork `NousResearch/hermes-agent`, copy `catalog/fledge.yaml` to `plugin-catalog/fledge.yaml` with the real
-`repo`, `sha` and `maintainer`, and open the PR with the body below. Wait for the catalog CI job to go green.
+## 3. Record the video
+
+Follow `DEMO.md`: real session, real failures, **under 90 seconds** (target 80). Post it on X tagging
+@NousResearch and keep the link.
+
+## 4. Open the catalog PR
+
+```bash
+git rev-parse HEAD                           # the 40-character sha to pin
+```
+
+Fork `NousResearch/hermes-agent`, add **one file**, `plugin-catalog/fledge.yaml` (a copy of
+`catalog/fledge.yaml` with the real `repo`, quoted `sha` and `maintainer`), run the catalog validator, and
+open the PR with the body below. Then send the form.
 
 ### PR title
 
@@ -66,14 +76,14 @@ Fork `NousResearch/hermes-agent`, copy `catalog/fledge.yaml` to `plugin-catalog/
 > **Fledge — skills have to earn their wings.**
 >
 > Hermes' self-improvement loop saves skills based on the agent's own judgment of whether a task went
-> well. The most-upvoted Hermes complaint in Kilo's analysis of 1,300+ r/openclaw comments is that it
-> always thinks it did a good job, so skills learned from runs that quietly went wrong carry the mistake
-> forward, and later self-improvement can overwrite skills users tuned by hand.
+> well. In [Kilo's read of 1,300+ r/openclaw comments](https://kilo.ai/openclaw/vs-hermes), the first
+> complaint listed about Hermes is that self-evaluation always passes ("It always thinks it did a good
+> job"), and the second is self-improvement overwriting skills users tuned by hand.
 >
 > Fledge gates `skill_manage` on evidence from the run a skill was learned from, using only facts Hermes
-> reports through hooks: tools still failing when the turn ended, failed or interrupted turns, the user's
-> next message correcting the agent, `/undo` or a `/rollback` restore right after, denied approvals. No
-> model grades the model.
+> reports through hooks: tools still failing when the turn ended (shell commands judged per program),
+> failed or interrupted turns, the user's next message correcting the agent, `/undo` or a `/rollback`
+> restore right after, denied approvals. No model grades the model.
 >
 > - Saves learned from a bad run are held in Hermes' own skills pending queue with the reasons (the
 >   stock `/skills pending|diff|approve|reject` flow; `/fledge pending|diff|approve|reject` exposes it in
@@ -83,8 +93,8 @@ Fork `NousResearch/hermes-agent`, copy `catalog/fledge.yaml` to `plugin-catalog/
 >   and a save from a run the user corrected right after is grounded at once. Grounded skills Hermes
 >   created on its own are archived (recoverable with `hermes curator restore`); user-requested skills are
 >   only reported.
-> - Skills edited by hand are fingerprinted; autonomous rewrites of them become proposals in the same
->   queue (optionally Hermes' content lock).
+> - Skills edited by hand are fingerprinted; autonomous rewrites or deletes of them become proposals in
+>   the same queue (optionally Hermes' content lock).
 >
 > **Surfaces:** nine hooks (`pre_llm_call`, `pre_tool_call`, `post_tool_call`, `on_session_end`,
 > `on_session_finalize`, `on_session_reset`, `on_skill_lifecycle`, `pre_command`,
@@ -93,25 +103,27 @@ Fork `NousResearch/hermes-agent`, copy `catalog/fledge.yaml` to `plugin-catalog/
 > middleware, no core patches.
 >
 > **Undocumented imports (validate warnings), and why:** there is no public seam yet for (1) the skill
-> write origin, needed to tell the background-review fork from a foreground turn —
-> `tools.skill_provenance.get_current_write_origin`; (2) staging a write into the review queue —
+> write origin, needed to tell the background-review fork from a foreground turn:
+> `tools.skill_provenance.get_current_write_origin`; (2) staging a write into the review queue:
 > `tools.write_approval.stage_write` / `list_pending` / `skill_gist` and
-> `hermes_cli.write_approval_commands.handle_pending_subcommand`; (3) curator actions —
+> `hermes_cli.write_approval_commands.handle_pending_subcommand`; (3) curator actions:
 > `tools.skill_usage.archive_skill` / `set_locked` / `get_record`. All calls live in `bridge.py`, each
 > guarded, so a moved function disables one feature (reported by `/fledge doctor`) and never breaks a
 > turn. Happy to move to a `ctx` facade; issue draft below.
 >
 > **Disclosure:** reads hook payloads (tool statuses and error text, the first 280 characters of the next
 > user message) and skill folders to fingerprint them; writes its own SQLite under `plugin-data/fledge`
-> (names, fingerprints, verdict reasons, session/turn ids; no message text or skill content), held writes
-> into `pending/skills/`, and archive moves of grounded agent-created skills into `skills/.archive/`; no
-> network, no model calls, no credentials, no shell commands, no background processes; never approves
-> anything; the gate fails open on its own errors. Needs `plugins.isolation: in_process` for full
-> accuracy (in the plugin host it treats every save as autonomous).
+> (skill names, fingerprints, session/turn ids, verdict reasons quoting the matched correction phrase and
+> up to 80 characters of a tool error, hold summaries with the skill's one-line description; no other
+> message text, no skill bodies), held writes into `pending/skills/`, and archive moves of grounded
+> agent-created skills into `skills/.archive/`; no network, no model calls, no credentials, no shell
+> commands, no background processes; never approves anything; the gate lets writes through on its own
+> errors. Needs `plugins.isolation: in_process` (the default) for full accuracy.
 >
-> **Tested:** 93 unit and flow tests (`python -m pytest tests`); `hermes plugins doctor --ci` and
-> `hermes plugins validate --install-deps` on Hermes X.Y.Z (fill in); live run in an isolated
-> HERMES_HOME. Demo: VIDEO_LINK.
+> **Tested:** TESTS unit and flow tests (`python -m pytest tests`); `hermes plugins doctor --ci` and
+> `hermes plugins validate --install-deps` on Hermes v0.22.7 (`b200f5b`, Windows 11 ARM64); live sessions
+> in an isolated HERMES_HOME, results in
+> [VALIDATION.md](https://github.com/OWNER/hermes-fledge/blob/SHA/VALIDATION.md). Demo: VIDEO_LINK.
 
 ## 5. Optional: the issue that makes the imports go away
 

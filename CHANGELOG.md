@@ -15,3 +15,17 @@ First release, built for the Nous Research Hermes Agent Plugin Hackathon.
 - `/fledge` and `hermes fledge`: status, pending, diff, approve, reject, skill, protect, unprotect, release,
   forget, mode, doctor, scan, export.
 - Watch mode for a dry run.
+
+Validated against Hermes v0.22.7 before release (see VALIDATION.md), which changed:
+
+- Terminal failures are judged per program: a later successful `rm tmp.txt` no longer "recovers" a failed
+  `./fetch.sh`.
+- A gated batch with several ops on one skill is attributed to its run (one lifecycle event per op).
+- Denied approvals use the `session_id` Hermes sends; declining Fledge's own prompt is not a denial.
+- Held batches keep the legacy default `name` so `/skills approve` can replay them.
+- Corrections: curly apostrophes are recognized; "No, thanks." and other polite closers are not
+  corrections; a bare "No." is a weak signal.
+- Probation: a relapse or restore starts a fresh probation; the birth turn is not counted as a use; turns
+  recorded before `mode off` never ground anything later.
+- Autonomous deletes of hand-edited skills become proposals too.
+- `/fledge doctor` reports archive and content lock separately (the lock needs Hermes 0.22.7).

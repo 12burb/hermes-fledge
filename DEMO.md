@@ -1,28 +1,37 @@
 # Fledge demo: recipe and video script
 
-Target: a 90-second video (X allows 2:20 without Premium), recorded from a real Hermes session. Every beat below
+Target: an 80-second video (the hackathon rule is **under 90 seconds**), recorded from a real Hermes session. Every beat below
 is the real plugin doing real work; nothing is mocked. If a beat does not happen on a take, run it again. Do not
 fake a correction or a failure.
 
 ## Setup (once, about 5 minutes)
 
 ```bash
+hermes --version                                   # Fledge needs Hermes 0.22.7 or newer
 hermes profile create fledge-demo --clone          # keeps your keys, separate skills and memory
-hermes plugins install <owner>/hermes-fledge --enable
+hermes -p fledge-demo plugins install <owner>/hermes-fledge --enable
 mkdir -p ~/fledge-demo && cp demo/fetch_water.sh demo/readings.csv ~/fledge-demo/
 chmod +x ~/fledge-demo/fetch_water.sh
-hermes chat --profile fledge-demo                  # start the session inside ~/fledge-demo
+hermes -p fledge-demo chat --in ~/fledge-demo      # start the session inside ~/fledge-demo
 ```
+
+`demo/fetch_water.sh` is a prop: it prints canned rows and then really exits 1 with a 404 message; it makes
+no network call. The failure Fledge sees is real; only the data source is staged. Its header comment no longer
+says "demo" because the agent read it and treated the failure as expected (a live finding, VALIDATION.md).
 
 In the session, confirm the plugin is live with `/fledge doctor` (every line `ok`). Use a terminal font size
 that reads on a phone (18 pt+), and a dark theme.
 
-## Beat 1 — the save gate (0:08–0:35)
+Use a fresh profile for every full take: memories and skills from a previous take change what the agent
+does (it will "remember" the script fails and skip the retry).
+
+## Beat 1 — the save gate (0:05–0:30)
 
 1. Prompt: `Run ./fetch_water.sh and turn what it returns into results.csv`
    The script prints two rows, then fails with an HTTP 404 and exits 1. Hermes usually retries, then writes
    a partial file and wraps up. (If it gives up after a single failure, Fledge rates the run unclear, since
-   one failing command can be harmless, and lets the save through. Retake.)
+   one failing command can be harmless, and lets the save through. Retake. Do not show the script's source
+   on screen before this beat.)
 2. Prompt: `/refine save the procedure for pulling water results as a skill`
    This runs Hermes' background review now instead of waiting for its usual nudge. The review tries to save
    a skill from the run it just watched fail.
@@ -33,7 +42,7 @@ that reads on a phone (18 pt+), and a dark theme.
 
 Caption: *Hermes was about to learn from a run that failed. Fledge held it for review.*
 
-## Beat 2 — "it always thinks it did a good job" (0:35–1:00)
+## Beat 2 — "it always thinks it did a good job" (0:30–0:52)
 
 1. Prompt: `Sort readings.csv by sample date, newest first, and give me a markdown table`
    The dates are in four formats on purpose (02/10/2026 vs 10/02/2026 vs 3 Oct 2026). Check the result
@@ -48,43 +57,41 @@ Caption: *Hermes was about to learn from a run that failed. Fledge held it for r
 
 Caption: *The agent graded itself an A. Your correction is the grade Fledge uses.*
 
-## Beat 3 — your edits stay yours (1:00–1:20)
+## Beat 3 — your edits stay yours (0:52–1:10)
 
 1. Open the saved skill from beat 1 or 2 (restore one first if needed: `hermes curator restore NAME`),
    e.g. `~/.hermes/profiles/fledge-demo/skills/<name>/SKILL.md`, and tune a line by hand (add a rule like
    "Always parse dates as DD/MM/YYYY").
 2. Prompt something that uses it, then `/refine improve that skill`.
 3. The review tries to rewrite it. Fledge turns the rewrite into a proposal:
-   `🪶 Fledge: Hermes tried to rewrite 'sort-readings-by-date', which you edited by hand. Saved as a proposal
+   `🪶 Fledge: Hermes tried to change 'sort-readings-by-date', which you edited by hand. Saved as a proposal
    instead: /fledge diff …`
 
 Caption: *Self-improvement, without overwriting the person who improved it first.*
 
-## Close (1:20–1:30)
+## Close (1:10–1:20)
 
 `/fledge` overview on screen, then the end card:
 
 > **Fledge** — skills have to earn their wings.
 > No model grades the model. 9 hooks · MIT · `hermes plugins install <owner>/hermes-fledge`
 
-B-roll worth having: `python -m pytest tests` (93 passed) and `hermes plugins validate .` (green).
+B-roll worth having: `python -m pytest tests` (124 passed) and `hermes plugins validate .` (green).
 
-## Narration (one voice, about 210 words)
+## Narration (one voice, about 175 words, ~75 seconds)
 
-> Hermes learns from its own work. After a task, it writes down what it did as a skill, and uses it next
-> time. But who grades the work? On Reddit, the most-upvoted complaint about Hermes is that it always
-> thinks it did a good job.
+> Hermes learns from its own work: after a task it saves what it did as a skill. But who grades the work?
+> In an analysis of 1,300 r/openclaw comments, the first complaint about Hermes: it always thinks it did a good job.
 >
 > Watch. This data pull fails halfway: a 404, two rows out of six. Hermes wraps up anyway, and its
-> self-review goes to save the procedure as a skill. Fledge stops it. The run it learned from ended with a
-> failing command, so the skill waits for my review instead of going live.
+> self-review goes to save the procedure. Fledge stops it. The run ended with a failing command, so the
+> skill waits for my review instead of going live.
 >
-> Here, nothing looked wrong. The table rendered, so the skill saves, on probation. Then I check the
-> dates. Wrong. I say so, and Fledge grounds the skill it just learned from that mistake, archived, one
-> command to restore.
+> Here nothing looked wrong, so the skill saves, on probation. Then I check the dates. Wrong. I say so,
+> and Fledge grounds the skill it just learned from that mistake. Archived, one command to restore.
 >
 > And when I tune a skill by hand, Hermes' next self-improvement doesn't overwrite me. It becomes a
-> proposal I can approve or reject.
+> proposal.
 >
-> Fledge never asks a model whether a model did well. It uses what actually happened: errors left
-> unresolved, failed turns, my corrections, my undos. New skills have to earn their wings.
+> Fledge never asks a model whether a model did well. It uses what actually happened. New skills have to
+> earn their wings.
