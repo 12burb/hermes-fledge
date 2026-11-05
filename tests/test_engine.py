@@ -482,3 +482,14 @@ def test_review_decisions_are_logged_with_real_words(engine, bridge):
     review_save(engine, bridge)
     engine._review("reject", "p0001")
     assert engine.ledger.recent_events(1)[0]["kind"] == "rejected"
+
+
+def test_a_skill_deleted_before_its_use_is_judged_is_not_resurrected(engine, bridge):
+    """Live finding (Hermes 0.22.7): a turn used a skill, the skill was moved away and forgotten, and the
+    turn's later judgement re-created it as a veteran."""
+    turn(engine, "t1", "rank the readings", skills=["csv-wrangling"])
+    bridge.missing.add("csv-wrangling")
+    engine.ledger.forget("csv-wrangling")
+    turn(engine, "t2", "thanks")  # the next turn finalizes t1
+    engine.hook_on_session_finalize(session_id=SID)
+    assert engine.ledger.get_skill("csv-wrangling") is None

@@ -13,6 +13,7 @@ def test_bridge_degrades_without_hermes(isolated_home, tmp_path):
     assert bridge.set_locked("x", True) is False
     assert bridge.created_by("x") == ""
     assert bridge.locate_skill_dir("x") is None
+    assert bridge.skill_missing("x") is False  # can't tell, so never "deleted"
     assert bridge.skill_for_path(str(tmp_path / "SKILL.md")) is None
     assert bridge.skill_gist("create", "x", {}) == "create 'x'"
     caps = bridge.capabilities()

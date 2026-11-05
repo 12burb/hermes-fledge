@@ -168,6 +168,20 @@ class HermesBridge:
             self._fail("skill lookup", exc)
             return None
 
+    def skill_missing(self, name: str) -> bool:
+        """True only when Hermes' own lookup ran and found no such skill (deleted or moved away); False when
+        it exists or when it can't be told."""
+        try:
+            from tools.skills_tool import locate_skill, skill_lookup_path_error, skill_search_dirs
+            if skill_lookup_path_error(name):
+                return False
+            roots, _active = skill_search_dirs()
+            error, _skill_dir, _skill_md = locate_skill(name, None, roots)
+            return bool(error)
+        except Exception as exc:
+            self._fail("skill lookup", exc)
+            return False
+
     def skill_roots(self) -> list:
         try:
             from tools.skills_tool import skill_search_dirs

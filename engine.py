@@ -404,7 +404,11 @@ class Fledge:
                 self._judge_use(name, turn, verdict, settings)
 
     def _judge_use(self, name: str, turn: Turn, verdict: Verdict, settings: Settings) -> None:
-        record = self.ledger.get_skill(name) or self.ledger.ensure_skill(name, VETERAN)
+        record = self.ledger.get_skill(name)
+        if record is None:
+            if self.bridge.skill_missing(name):
+                return  # used, then deleted or forgotten before the turn was judged: nothing left to track
+            record = self.ledger.ensure_skill(name, VETERAN)
         if record["state"] in (GROUNDED, ARCHIVED):
             return
         if record.get("born_turn") and (record.get("born_session"), record.get("born_turn")) == \
