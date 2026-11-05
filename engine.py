@@ -186,7 +186,7 @@ class Fledge:
                 self.ledger.set_state(name, ARCHIVED, "archived")
         elif action == "restored":
             if self.ledger.get_skill(name) is not None:
-                self.ledger.set_state(name, FLEDGLING, "restored: back on probation")
+                self.ledger.restart_probation(name, "restored: back on probation")
                 self.ledger.add_event("restored", name, "back on probation")
 
     def _register_write(self, name: str, action: str, origin: str, sid: str, provenance: str) -> None:
@@ -391,7 +391,7 @@ class Fledge:
             self.ledger.set_state(name, FLEDGED, "graduated after clean runs")
             self.ledger.add_event("fledged", name, f"{int(record['clean_uses']) + outcome.clean} clean runs")
         elif outcome.transition == RELAPSED:
-            self.ledger.set_state(name, FLEDGLING, "two bad runs in a row: back on probation")
+            self.ledger.restart_probation(name, "two bad runs in a row: back on probation")
             self.ledger.add_event("relapsed", name, verdict.summary(1))
             self.notifier.queue(turn.session_id, f"'{name}' went wrong twice in a row, so it is back on probation.")
 

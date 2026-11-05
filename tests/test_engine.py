@@ -341,3 +341,40 @@ def test_cleanup_command_does_not_hide_a_failed_pull(engine, bridge):
     directive = review_save(engine, bridge)
     assert directive["action"] == "block" and bridge.staged
     assert "terminal (./fetch_water.sh) failed 2 times in a row" in bridge.staged[-1]["summary"]
+
+
+def _graduate(engine, bridge):
+    turn(engine, "t0", "x")
+    review_save(engine, bridge)
+    for i in range(1, 4):
+        turn(engine, f"c{i}", "use it", skills=["pull-water-results"])
+    turn(engine, "c4", "next")
+    assert engine.ledger.get_skill("pull-water-results")["state"] == FLEDGED
+
+
+def test_relapsed_skill_is_not_grounded_by_a_clean_run(engine, bridge):
+    """Review finding: after a relapse the old bad-run count survived, so the next run (even a clean
+    one) grounded and archived the skill: '2 of its 6 runs on probation went wrong (no problems found)'."""
+    _graduate(engine, bridge)
+    for t in ("b1", "b2"):
+        turn(engine, t, "use it", BAD_RUN, skills=["pull-water-results"])
+    turn(engine, "b3", "next")
+    rec = engine.ledger.get_skill("pull-water-results")
+    assert rec["state"] == FLEDGLING and rec["bad_uses"] == 0 and rec["total_bad"] == 2
+    turn(engine, "g1", "use it", skills=["pull-water-results"])
+    turn(engine, "g2", "next")
+    assert engine.ledger.get_skill("pull-water-results")["state"] == FLEDGLING and bridge.archived == []
+
+
+def test_restored_skill_starts_a_fresh_probation(engine, bridge):
+    turn(engine, "t0", "x")
+    review_save(engine, bridge)
+    for t in ("b1", "b2"):
+        turn(engine, t, "use it", BAD_RUN, skills=["pull-water-results"])
+    turn(engine, "b3", "next")
+    assert engine.ledger.get_skill("pull-water-results")["state"] == ARCHIVED
+    engine.hook_on_skill_lifecycle(action="restored", skill_name="pull-water-results", session_id=SID)
+    turn(engine, "g1", "use it", skills=["pull-water-results"])
+    turn(engine, "g2", "next")
+    rec = engine.ledger.get_skill("pull-water-results")
+    assert rec["state"] == FLEDGLING and rec["clean_uses"] == 1 and rec["bad_uses"] == 0

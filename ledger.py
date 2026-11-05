@@ -172,6 +172,13 @@ class Ledger:
         self._exec("UPDATE skills SET state = ?, note = ?, updated_at = ? WHERE name = ?",
                    (state, note, self._clock(), name))
 
+    def restart_probation(self, name: str, note: str = "") -> None:
+        """Back to fledgling with fresh per-version counters (totals survive), as a new write does.
+        Without the reset a relapsed or restored skill carries its old bad runs and is grounded by
+        its very next run, however that run went."""
+        self._exec("UPDATE skills SET state = ?, clean_uses = 0, bad_uses = 0, neutral_uses = 0, bad_streak = 0,"
+                   " note = ?, updated_at = ? WHERE name = ?", (FLEDGLING, note, self._clock(), name))
+
     def set_human_tuned(self, name: str, tuned: bool, *, manual: bool | None = None) -> None:
         now = self._clock()
         self.ensure_skill(name)
