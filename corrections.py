@@ -41,9 +41,15 @@ _WEAK = [
 
 _POSITIVE = [
     r"^\s*no (?:worries|problem|rush|need|thanks)\b",
+    # Polite closers to an agent's offer ("Want me to also retry?"): not complaints about the work.
+    r"^\s*(?:no|nope|nah)\s*[,.!]?\s*(?:thanks|thank you|thx|ty|worries|problem|need)\b",
+    r"^\s*(?:no|nope|nah)\s*[,.!]?\s*(?:that'?s|that is|it'?s)\s+(?:all|it|fine|good|enough|everything)\b",
+    r"^\s*(?:no|nope|nah)\s*[,.!]?\s*(?:all\s+)?good\b",
     r"\b(?:perfect|awesome|great job|nice work|works now|that worked|it works|works great|looks good|lgtm)\b",
     r"^\s*(?:thanks|thank you|thx|ty)\b",
 ]
+
+_APOSTROPHES = str.maketrans({"\u2019": "'", "\u2018": "'", "\u02bc": "'", "\u2032": "'", "`": "'"})
 
 _STRONG_RE = [re.compile(p, re.IGNORECASE | re.MULTILINE) for p in _STRONG]
 _WEAK_RE = [re.compile(p, re.IGNORECASE | re.MULTILINE) for p in _WEAK]
@@ -75,7 +81,8 @@ def message_text(message: Any) -> str:
 
 def detect_correction(message: Any) -> Correction | None:
     """Return the correction found at the start of *message*, or None."""
-    text = message_text(message).strip()
+    # Phones, Telegram/iOS smart punctuation and macOS turn ' into ’; the patterns use ASCII.
+    text = message_text(message).translate(_APOSTROPHES).strip()
     if not text:
         return None
     window = text[:_WINDOW]

@@ -43,3 +43,23 @@ def test_multimodal_message_text():
     parts = [{"type": "text", "text": "that's wrong"}, {"type": "image_url", "image_url": {"url": "x"}}]
     assert message_text(parts) == "that's wrong"
     assert detect_correction(parts).strength == "strong"
+
+
+@pytest.mark.parametrize("message", ["That’s wrong — 02/10/2026 is 2 October", "It doesn’t work", "that‘s not right"])
+def test_curly_apostrophes_from_phones_still_count(message):
+    """Review finding: smart punctuation (iOS/Telegram, macOS) produced ’, which no pattern matched."""
+    found = detect_correction(message)
+    assert found is not None and found.strength == "strong", message
+
+
+@pytest.mark.parametrize("message", ["No, thanks.", "No thank you", "Nope, that's it", "No, that’s all for now",
+                                     "no, all good", "Nah, that's fine"])
+def test_polite_closers_are_not_corrections(message):
+    """Review finding: 'No, thanks.' to "Want me to also retry?" scored a strong correction and grounded the skill."""
+    assert detect_correction(message) is None, message
+
+
+@pytest.mark.parametrize("message", ["No, the dates are mixed up", "No, that's not what I asked for", "No, wrong file"])
+def test_no_followed_by_a_complaint_still_counts(message):
+    found = detect_correction(message)
+    assert found is not None and found.strength == "strong", message
