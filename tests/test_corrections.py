@@ -10,7 +10,7 @@ from fledge.corrections import detect_correction, message_text
     "undo that please",
     "you jumbled everything up",
     "Wrong file. Use the March export",
-    "nope.",
+    "wrong",
     "It thought it kicked ass but it's all wrong",
     "you got everything wrong",
 ])
@@ -20,7 +20,7 @@ def test_strong_corrections(message):
 
 
 @pytest.mark.parametrize("message", ["try again with the other API", "not quite", "close, but the dates are off",
-                                     "you forgot the header row"])
+                                     "you forgot the header row", "nope.", "No", "no!"])
 def test_weak_corrections(message):
     found = detect_correction(message)
     assert found is not None and found.strength == "weak", message

@@ -51,6 +51,10 @@ _POSITIVE = [
 
 _APOSTROPHES = str.maketrans({"\u2019": "'", "\u2018": "'", "\u02bc": "'", "\u2032": "'", "`": "'"})
 
+# A message that is only "No." / "nope" is as often an answer to the agent's own question ("Want me to
+# retry?") as a verdict on its work: a weak signal. "No, <complaint>" and "wrong" stay strong.
+_BARE_NO_RE = re.compile(r"^\s*(?:no|nope|nah)[\s,.!]*$", re.IGNORECASE)
+
 _STRONG_RE = [re.compile(p, re.IGNORECASE | re.MULTILINE) for p in _STRONG]
 _WEAK_RE = [re.compile(p, re.IGNORECASE | re.MULTILINE) for p in _WEAK]
 _POSITIVE_RE = [re.compile(p, re.IGNORECASE | re.MULTILINE) for p in _POSITIVE]
@@ -86,6 +90,8 @@ def detect_correction(message: Any) -> Correction | None:
     if not text:
         return None
     window = text[:_WINDOW]
+    if _BARE_NO_RE.match(window):
+        return Correction("weak", window.strip(" ,.!"))
     positive = any(rx.search(window) for rx in _POSITIVE_RE)
     for rx in _STRONG_RE:
         match = rx.search(window)
