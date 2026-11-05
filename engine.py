@@ -67,7 +67,8 @@ class Fledge:
         self._set_config = set_config
         self._clock = clock
         self._lock = threading.RLock()
-        # skill name -> (session_id, turn_id, origin, at) for writes Fledge let through and is expecting.
+        # skill name -> (session_id, turn_id, origin, at, ops_left) for writes Fledge let through and is
+        # expecting; a batch with several ops on one skill fires one lifecycle event per op.
         self._inflight: dict[str, tuple] = {}
 
     @property
@@ -191,6 +192,8 @@ class Fledge:
     def _register_write(self, name: str, action: str, origin: str, sid: str, provenance: str) -> None:
         with self._lock:
             inflight = self._inflight.pop(name, None)
+            if inflight is not None and len(inflight) > 4 and inflight[4] > 1:
+                self._inflight[name] = (*inflight[:4], inflight[4] - 1)
             self._expire_inflight()
         if inflight is None:
             # Not a call Fledge gated: a /skills approve replay, the Desktop editor or an external tool.
@@ -270,8 +273,11 @@ class Fledge:
     def _mark_inflight(self, targets: list[SkillOp], sid: str, turn: Turn | None, origin: str) -> None:
         with self._lock:
             now = self._clock()
+            counts: dict[str, int] = {}
             for op in targets:
-                self._inflight[op.name] = (sid, turn.turn_id if turn else "", origin, now)
+                counts[op.name] = counts.get(op.name, 0) + 1
+            for name, ops_left in counts.items():
+                self._inflight[name] = (sid, turn.turn_id if turn else "", origin, now, ops_left)
 
     def _hand_tuned(self, targets: list[SkillOp], sid: str) -> list[str]:
         """Targets the user edited by hand: flagged before, or detected now by a changed fingerprint."""

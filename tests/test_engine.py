@@ -316,3 +316,28 @@ def test_held_batch_keeps_the_legacy_default_name_for_replay(engine, bridge):
     payload = bridge.staged[-1]["payload"]
     assert payload["action"] == "batch" and payload["name"] == "pull-water-results"
     assert payload["operations"] == args["operations"]
+
+
+def test_batch_with_several_ops_on_one_skill_is_attributed_to_its_run(engine, bridge):
+    """Live finding (Hermes 0.22.7): the review patched one skill with a two-op batch; the second op's
+    lifecycle event found no in-flight record and was logged as saved outside a gated call."""
+    turn(engine, "t1", "pull the water results")
+    review_save(engine, bridge)
+    args = {"operations": [{"action": "patch", "name": "pull-water-results", "old_string": "a", "new_string": "b"},
+                           {"action": "patch", "name": "pull-water-results", "old_string": "c", "new_string": "d"}]}
+    assert review_save(engine, bridge, args=args) is None
+    written = [e["detail"] for e in engine.ledger.recent_events(20) if e["kind"] == "written"]
+    assert len(written) == 3 and not any("approved" in d for d in written)
+
+
+def test_cleanup_command_does_not_hide_a_failed_pull(engine, bridge):
+    """The agent retried the failing script, then cleaned up a scratch file: the review save is held."""
+    engine.hook_pre_llm_call(session_id=SID, turn_id="t1", user_message="Run ./fetch_water.sh into results.csv")
+    for command, status in [("./fetch_water.sh > results.csv", "error"), ("./fetch_water.sh > results.csv", "error"),
+                            ("rm -f fetch_stderr.txt", "ok")]:
+        engine.hook_post_tool_call(tool_name="terminal", args={"command": command}, session_id=SID, turn_id="t1",
+                                   status=status, error_message="exit 1: HTTP 404" if status == "error" else None)
+    engine.hook_on_session_end(session_id=SID, turn_id="t1", completed=True)
+    directive = review_save(engine, bridge)
+    assert directive["action"] == "block" and bridge.staged
+    assert "terminal (./fetch_water.sh) failed 2 times in a row" in bridge.staged[-1]["summary"]
