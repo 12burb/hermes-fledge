@@ -1,0 +1,82 @@
+name: fledge
+version: 0.1.0
+manifest_version: 2
+api_version: 1
+description: >-
+  Skills have to earn their wings. Fledge checks the evidence from the run a skill was learned
+  from (tool errors left unresolved, a failed turn, you correcting the agent, /undo, denied
+  actions) before Hermes saves or rewrites it. A skill learned from a bad run is held in the
+  standard /skills pending queue instead of going live; new skills start on probation and are
+  grounded (archived, recoverable) when their real runs keep going wrong; skills you edited by
+  hand are protected from autonomous rewrites, which become proposals. Deterministic: no model
+  grades the model.
+author: Borb (12birb)
+license: MIT
+requires_hermes: ">=0.22.7"
+tags: [skills, self-improvement, curator, reliability, safety]
+provides_tools: []
+provides_hooks:
+  - pre_llm_call
+  - pre_tool_call
+  - post_tool_call
+  - on_session_end
+  - on_session_finalize
+  - on_session_reset
+  - on_skill_lifecycle
+  - pre_command
+  - post_approval_response
+config_schema:
+  mode:
+    type: str
+    choices: [enforce, watch, off]
+    default: enforce
+    label: Mode
+    description: "enforce holds bad saves; watch only records what it would have done; off disables Fledge."
+  strictness:
+    type: str
+    choices: [lenient, standard, strict]
+    default: standard
+    label: Strictness
+    description: "How much bad evidence it takes to call a run bad (score threshold 4 / 3 / 2)."
+  graduate_after:
+    type: int
+    default: 3
+    label: Clean runs to graduate
+    description: "Clean runs a new skill needs before it leaves probation."
+  ground_after:
+    type: int
+    default: 2
+    label: Bad runs to ground
+    description: "Bad runs during probation that ground a skill."
+  auto_archive:
+    type: bool
+    default: true
+    label: Archive grounded agent skills
+    description: "Archive (recoverably) a grounded skill that Hermes created on its own. Skills you asked for are only reported."
+  protect_hand_edits:
+    type: bool
+    default: true
+    label: Protect hand-edited skills
+    description: "Turn autonomous rewrites of skills you edited by hand into proposals."
+  on_hand_edit:
+    type: str
+    choices: [protect, lock]
+    default: protect
+    label: On a hand edit
+    description: "protect stages autonomous rewrites as proposals; lock also sets Hermes' own content lock (hermes curator lock)."
+  foreground_bad_run:
+    type: str
+    choices: [approve, stage, allow]
+    default: approve
+    label: Foreground save after a bad run
+    description: "When the agent saves a skill mid-turn after errors: ask you (approve), queue it (stage), or let it through (allow)."
+  notify:
+    type: bool
+    default: true
+    label: Chat notices
+    description: "Post a short notice in the conversation when Fledge holds, grounds or protects a skill."
+  settle_hours:
+    type: float
+    default: 6.0
+    label: Hours before a quiet run counts as clean
+    description: "A run with no follow-up message is judged after this long."
