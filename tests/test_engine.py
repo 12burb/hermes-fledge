@@ -463,3 +463,14 @@ def test_a_compound_command_whose_parts_succeeded_stays_clean(engine, bridge):
                                turn_id="t1", status="ok", result=json.dumps({"output": "5 passed\nexit=0"}))
     engine.hook_on_session_end(session_id=SID, turn_id="t1", completed=True)
     assert review_save(engine, bridge) is None
+
+
+def test_retry_written_as_one_if_else_command_is_held(engine, bridge):
+    import json
+    from test_evidence import TAKE_4, TAKE_4_OUT
+    engine.hook_pre_llm_call(session_id=SID, turn_id="t1", user_message="Run ./fetch_water.sh, retry once")
+    engine.hook_post_tool_call(tool_name="terminal", args={"command": TAKE_4}, session_id=SID, turn_id="t1",
+                               status="ok", result=json.dumps({"output": TAKE_4_OUT, "exit_code": 0}))
+    engine.hook_on_session_end(session_id=SID, turn_id="t1", completed=True)
+    assert review_save(engine, bridge)["action"] == "block"
+    assert "terminal (./fetch_water.sh) failed 2 times in a row" in bridge.staged[-1]["summary"]

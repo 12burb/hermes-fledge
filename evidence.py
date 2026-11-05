@@ -113,36 +113,140 @@ def _previous_program(segments: list[str], index: int) -> str | None:
     return None
 
 
+# Commands whose non-zero exit is an answer, not a failure (``if grep -q x f`` is control flow).
+_PREDICATES = frozenset({
+    "grep", "egrep", "fgrep", "rg", "test", "[", "[[", "diff", "cmp", "which", "where", "command", "type",
+    "hash", "pgrep", "pidof", "id", "getent", "ls", "stat", "git", "true", "false", "read",
+})
+_SPLIT_KEEP = re.compile(r"(&&|\|\||;|\n)")
+
+
+def _echo_literal(segment: str) -> str | None:
+    """The fixed text an ``echo`` / ``printf`` segment prints (no variables), else None."""
+    s = re.sub(r"^\s*(?:then|else|do)\s+", "", segment).strip()
+    m = re.match(r"""^(echo|printf)\s+(?:-[a-zA-Z]+\s+)*(["'])(.*?)\2\s*$""", s) or \
+        re.match(r"""^(echo)\s+()([^\s$`'"][^$`'"]*)$""", s)
+    if not m:
+        return None
+    text = m.group(3)
+    if m.group(1) == "printf":
+        if "%" in text:
+            return None
+        text = text.replace("\\n", "\n")
+    text = text.strip()
+    if "$" in text or "`" in text or "\\" in text or len(text) < 4 or not re.search(r"[A-Za-z]", text):
+        return None
+    return text
+
+
+def _program_for_status(segment: str) -> str | None:
+    program = _segment_program(segment)
+    if not program or program.split(" ", 1)[0].rsplit("/", 1)[-1] in _PREDICATES:
+        return None
+    return program
+
+
+def _branch_statuses(command: str, lines: set) -> list[tuple[int, str, int]]:
+    """``if PROG; then echo A; else echo B; fi`` and ``PROG && echo A || echo B``: which branch's fixed echo
+    appears as a whole output line says how PROG exited. ``(position, program, code)``."""
+    parts = _SPLIT_KEEP.split(command)
+    segments = parts[0::2]
+    seps = parts[1::2] + [""]
+    out: list[tuple[int, str, int]] = []
+    stack: list[dict] = []
+    for i, raw in enumerate(segments):
+        s = raw.strip()
+        word = s.split(None, 1)[0] if s else ""
+        if word == "if":
+            cond = s[2:].strip()
+            stack.append({"at": i, "program": None if cond.startswith("!") else _program_for_status(cond),
+                          "phase": "cond", "ok": None, "fail": None, "valid": seps[i] in (";", "\n")})
+            continue
+        frame = stack[-1] if stack else None
+        if word == "then" and frame is not None:
+            frame["phase"] = "then"
+        elif word == "else" and frame is not None:
+            frame["phase"] = "else"
+        elif word == "elif" and frame is not None:
+            frame["valid"] = False
+            continue
+        elif word == "fi" and frame is not None:
+            stack.pop()
+            if frame["valid"] and frame["program"]:
+                if frame["fail"] and frame["fail"] in lines:
+                    out.append((frame["at"], frame["program"], 1))
+                elif frame["ok"] and frame["ok"] in lines:
+                    out.append((frame["at"], frame["program"], 0))
+            continue
+        elif frame is not None and frame["phase"] == "cond":
+            frame["valid"] = False  # a compound condition (if a && b): ambiguous
+            continue
+        if frame is not None and frame["phase"] in ("then", "else"):
+            literal = _echo_literal(s)
+            slot = "ok" if frame["phase"] == "then" else "fail"
+            if literal and frame[slot] is None:
+                frame[slot] = literal
+            continue
+        # PROG && echo A || echo B   (outside any if)
+        if word in ("then", "else", "do", "done", "fi", "") or _echo_literal(s) is not None:
+            continue
+        program = _program_for_status(s)
+        if not program or seps[i] not in ("&&", "||"):
+            continue
+        ok = fail = None
+        k = i
+        while seps[k] in ("&&", "||") and k + 1 < len(segments):
+            literal = _echo_literal(segments[k + 1])
+            if literal is None:
+                break
+            if seps[k] == "&&" and ok is None:
+                ok = literal
+            elif seps[k] == "||" and fail is None:
+                fail = literal
+            k += 1
+        if fail and fail in lines:
+            out.append((i, program, 1))
+        elif ok and ok in lines:
+            out.append((i, program, 0))
+    return out
+
+
 def captured_exit_statuses(command: str, output: str) -> list[tuple[str, int]]:
-    """``[("terminal:<program>", exit_code), ...]`` the command printed for its own parts via ``$?``."""
-    if not command or not output or "$?" not in command:
+    """``[("terminal:<program>", exit_code), ...]`` the command itself reported for its parts, in order:
+    a labelled ``$?`` echo, or which of its own fixed ``echo`` branches ran. Never guessed from other text."""
+    if not command or not output:
         return []
-    segments = _SEGMENT_SPLIT.split(command)
-    found: list[tuple[str, str]] = []  # (program, label)
-    for i, segment in enumerate(segments):
-        var = _STATUS_VAR.match(segment)
-        if var:
-            name = var.group(1)
-            program = _previous_program(segments, i)
-            ref = re.compile(_LABEL + r"\$\{?" + re.escape(name) + r"\}?(?!\w)")
-            label = next((m.group(1) for later in segments[i + 1:] for m in [ref.search(later)] if m), None)
-            if program and label:
-                found.append((program, label))
-            continue
-        if "$?" in segment:
-            m = re.search(_LABEL + r"\$\?", segment)
-            program = _previous_program(segments, i)
-            if m and program:
-                found.append((program, m.group(1)))
-    statuses: list[tuple[str, int]] = []
-    position = 0
-    for program, label in found:
-        m = re.compile(re.escape(label.rstrip()) + r"\s*(\d{1,3})\b").search(output, position)
-        if m is None:
-            continue
-        position = m.end()
-        statuses.append((f"terminal:{program}", int(m.group(1))))
-    return statuses
+    found: list[tuple[int, str, int]] = []
+    lines = {line.strip() for line in output.splitlines() if line.strip()}
+    if "$?" in command:
+        segments = _SEGMENT_SPLIT.split(command)
+        labelled: list[tuple[int, str, str]] = []  # (position, program, label)
+        for i, segment in enumerate(segments):
+            var = _STATUS_VAR.match(segment)
+            if var:
+                name = var.group(1)
+                program = _previous_program(segments, i)
+                ref = re.compile(_LABEL + r"\$\{?" + re.escape(name) + r"\}?(?!\w)")
+                label = next((m.group(1) for later in segments[i + 1:] for m in [ref.search(later)] if m), None)
+                if program and label:
+                    labelled.append((i, program, label))
+                continue
+            if "$?" in segment:
+                m = re.search(_LABEL + r"\$\?", segment)
+                program = _previous_program(segments, i)
+                if m and program:
+                    labelled.append((i, program, m.group(1)))
+        position = 0
+        for i, program, label in labelled:
+            m = re.compile(re.escape(label.rstrip()) + r"\s*(\d{1,3})\b").search(output, position)
+            if m is None:
+                continue
+            position = m.end()
+            if program.split(" ", 1)[0].rsplit("/", 1)[-1] not in _PREDICATES:
+                found.append((i * 2, program, int(m.group(1))))
+    else:
+        found.extend((i * 2, program, code) for i, program, code in _branch_statuses(command, lines))
+    return [(f"terminal:{program}", code) for _pos, program, code in sorted(found, key=lambda f: f[0])]
 
 
 def _clip(text: str | None, limit: int = 120) -> str:

@@ -205,3 +205,39 @@ def test_no_label_or_no_echo_means_nothing_is_read():
     assert captured_exit_statuses("./x.sh; cat out", "exit=1") == []     # the command never printed $?
     assert captured_exit_statuses('./x.sh; echo "exit=$?"', "no status here") == []
     assert captured_exit_statuses("", "") == []
+
+
+# Take 4 (Hermes 0.22.7, glm-5.3): the retry the user asked for, written as one if/else command (exit_code 0).
+TAKE_4 = ('out="$TMPDIR/water_out.csv"; err="$TMPDIR/water_err.txt"; rm -f "$out" "$err"; '
+          'if ./fetch_water.sh > "$out" 2> "$err"; then echo "attempt 1: OK"; else echo "attempt 1: FAILED"; '
+          'echo "--- retrying once ---"; if ./fetch_water.sh > "$out" 2> "$err"; then echo "attempt 2: OK"; '
+          'else echo "attempt 2: FAILED"; fi; fi; echo "=== stdout (last attempt) ==="; cat "$out"; '
+          'echo "=== stderr (last attempt) ==="; cat "$err"')
+TAKE_4_OUT = ("attempt 1: FAILED\n--- retrying once ---\nattempt 2: FAILED\n=== stdout (last attempt) ===\n"
+              "site,sampled_on,nitrate_mg_l\nWabash-03,2026-10-02,4.1\n=== stderr (last attempt) ===\n"
+              "error: GET /water/results?page=2 -> HTTP 404 Not Found\n")
+
+
+def test_which_branch_of_its_own_if_else_ran_is_read():
+    from fledge.evidence import captured_exit_statuses
+    assert captured_exit_statuses(TAKE_4, TAKE_4_OUT) == [("terminal:./fetch_water.sh", 1)] * 2
+    ok_out = "attempt 1: OK\n=== stdout (last attempt) ===\n"
+    assert captured_exit_statuses(TAKE_4, ok_out) == [("terminal:./fetch_water.sh", 0)]
+    assert captured_exit_statuses('make build && echo "build ok" || echo "build failed"', "build failed") \
+        == [("terminal:make", 1)]
+    assert captured_exit_statuses('make build || echo "build failed"', "compiling\nbuild ok") == []
+
+
+def test_branch_reading_never_treats_control_flow_or_variables_as_failure():
+    from fledge.evidence import captured_exit_statuses
+    # predicates: a non-zero exit is an answer
+    assert captured_exit_statuses('if grep -q foo f.txt; then echo "found it"; else echo "no match"; fi',
+                                  "no match") == []
+    assert captured_exit_statuses('grep foo f.txt; echo "exit=$?"', "exit=1") == []
+    # compound condition and negation are ambiguous: not read
+    assert captured_exit_statuses('if a.sh && b.sh; then echo "both ok"; else echo "one failed"; fi',
+                                  "one failed") == []
+    assert captured_exit_statuses('if ! ./x.sh; then echo "x failed"; fi', "x failed") == []
+    # an echo with a variable is not a fixed literal; a substring is not a whole line
+    assert captured_exit_statuses('./x.sh || echo "failed: $reason"', "failed: 404") == []
+    assert captured_exit_statuses('./x.sh || echo "x failed"', "the x failed check passed") == []
