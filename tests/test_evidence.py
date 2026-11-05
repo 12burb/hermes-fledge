@@ -134,3 +134,49 @@ def test_skill_use_attaches_to_current_turn():
     tracker.begin_turn("s", "t1", "x")
     assert tracker.record_skill_use("s", "csv-cleaner") == "t1"
     assert "csv-cleaner" in tracker.current_turn("s").skills_used
+
+
+def test_a_different_command_succeeding_does_not_recover_a_failed_one():
+    """Live finding (Hermes 0.22.7): the agent ran ./fetch_water.sh (exit 1), then `rm fetch_stderr.txt`.
+    Keyed per tool, the rm 'recovered' terminal and the failed pull scored clean."""
+    from fledge.evidence import command_key
+    tracker = EvidenceTracker()
+    tracker.begin_turn("s", "t1", "Run ./fetch_water.sh and turn what it returns into results.csv")
+    for command, status, error in [("./fetch_water.sh > results.csv 2> fetch_stderr.txt", "error", "exit 1: 404"),
+                                   ("rm fetch_stderr.txt", "ok", "")]:
+        tracker.record_tool("s", "t1", "terminal", status, error, key=command_key("terminal", {"command": command}))
+    tracker.end_turn("s", "t1", completed=True)
+    verdict = score_turn(tracker.current_turn("s"))
+    assert verdict.level == "uncertain" and verdict.score == 2
+    assert any("terminal (./fetch_water.sh) was still failing" in r for r in verdict.reasons)
+
+
+def test_rerunning_the_same_program_is_still_a_recovery():
+    from fledge.evidence import command_key
+    tracker = EvidenceTracker()
+    tracker.begin_turn("s", "t1", "x")
+    for command, status in [("cd /w && ./fetch_water.sh > out.csv", "error"), ("./fetch_water.sh --retry > out.csv", "ok")]:
+        tracker.record_tool("s", "t1", "terminal", status, "", key=command_key("terminal", {"command": command}))
+    tracker.end_turn("s", "t1", completed=True)
+    assert score_turn(tracker.current_turn("s")).level == "clean"
+
+
+def test_retried_failing_program_with_cleanup_after_is_bad():
+    from fledge.evidence import command_key
+    tracker = EvidenceTracker()
+    tracker.begin_turn("s", "t1", "x")
+    for command, status in [("./fetch_water.sh > r.csv", "error"), ("./fetch_water.sh > r.csv", "error"),
+                            ("rm -f err.txt", "ok")]:
+        tracker.record_tool("s", "t1", "terminal", status, "exit 1", key=command_key("terminal", {"command": command}))
+    tracker.end_turn("s", "t1", completed=True)
+    verdict = score_turn(tracker.current_turn("s"))
+    assert verdict.bad and "failed 2 times in a row" in verdict.summary()
+
+
+def test_command_key_shapes():
+    from fledge.evidence import command_key
+    assert command_key("terminal", {"command": "FOO=1 python3 -u scripts/pull.py --page 2"}) == "terminal:python3 scripts/pull.py"
+    assert command_key("terminal", {"command": "sudo -n apt-get install x"}) == "terminal:apt-get"
+    assert command_key("terminal", {"command": r"C:\tools\x.exe /q"}) == "terminal:C:/tools/x.exe"
+    assert command_key("terminal", {"command": ""}) == "terminal"
+    assert command_key("write_file", {"path": "a"}) == "write_file"

@@ -14,6 +14,8 @@ A turn's verdict uses only facts Hermes reported:
 
 from __future__ import annotations
 
+import re
+import shlex
 import threading
 import time
 from collections import OrderedDict, deque
@@ -47,6 +49,44 @@ def _is_heavy(tool_name: str) -> bool:
     return tool_name.startswith(_HEAVY_PREFIXES) or tool_name.startswith("mcp_")
 
 
+# Terminal calls are judged per program, not per tool: a later ``rm scratch.txt`` that succeeds must not
+# count as "recovering" an earlier ``./fetch_data.sh`` that failed. Re-running the same program (any flags
+# or redirections) is still a recovery.
+_COMMAND_TOOLS = frozenset({"terminal"})
+_SEGMENT_SPLIT = re.compile(r"&&|\|\||;|\||\n")
+_SETUP_PROGRAMS = frozenset({"cd", "pushd", "popd", "export", "set", "source", ".", "true", ":"})
+_WRAPPERS = frozenset({"sudo", "env", "time", "nice", "nohup", "command", "exec", "timeout", "stdbuf"})
+_INTERPRETERS = re.compile(r"^(python[0-9.]*|py|node|deno|bun|ruby|perl|php|bash|sh|zsh|pwsh|powershell|uv|npx)$")
+
+
+def command_key(tool_name: str, args: object) -> str:
+    """Identity of a tool call for recovery tracking: ``terminal:<program>`` for shell commands (with the
+    script for interpreters, e.g. ``terminal:python fetch.py``), else the tool name."""
+    if tool_name not in _COMMAND_TOOLS or not isinstance(args, dict):
+        return tool_name
+    command = str(args.get("command") or "").strip()
+    for segment in _SEGMENT_SPLIT.split(command):
+        segment = segment.replace("\\", "/")  # Windows paths: POSIX shlex would eat the backslashes
+        try:
+            tokens = shlex.split(segment, posix=True)
+        except ValueError:
+            tokens = segment.split()
+        tokens = [t for t in tokens if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", t)]  # FOO=bar prefixes
+        while tokens and tokens[0] in _WRAPPERS:
+            tokens = tokens[1:]
+            while tokens and tokens[0].startswith("-"):
+                tokens = tokens[1:]
+        if not tokens or tokens[0] in _SETUP_PROGRAMS:
+            continue
+        program = tokens[0]
+        if _INTERPRETERS.match(program.rsplit("/", 1)[-1].lower()):
+            script = next((t for t in tokens[1:] if not t.startswith("-")), "")
+            if script:
+                program = f"{program.rsplit('/', 1)[-1]} {script}"
+        return f"{tool_name}:{program[:80]}"
+    return tool_name
+
+
 def _clip(text: str | None, limit: int = 120) -> str:
     text = " ".join(str(text or "").split())
     return text if len(text) <= limit else text[: limit - 1] + "…"
@@ -58,6 +98,18 @@ class ToolEvent:
     status: str
     error: str = ""
     at: float = 0.0
+    key: str = ""  # recovery identity (command_key); defaults to the tool name
+
+    @property
+    def ident(self) -> str:
+        return self.key or self.tool
+
+    @property
+    def label(self) -> str:
+        """``terminal (./fetch_water.sh)`` for per-command keys, else the tool name."""
+        if self.key and self.key != self.tool and self.key.startswith(self.tool + ":"):
+            return f"{self.tool} ({self.key[len(self.tool) + 1:]})"
+        return self.tool
 
 
 @dataclass
@@ -85,11 +137,11 @@ class Turn:
     def error_count(self) -> int:
         return sum(1 for ev in self.events if ev.status in (STATUS_ERROR, STATUS_BLOCKED))
 
-    def trailing_failures(self, tool: str) -> int:
-        """How many times *tool* failed in a row at the end of its calls in this turn."""
+    def trailing_failures(self, ident: str) -> int:
+        """How many times *ident* (a tool, or a terminal program) failed in a row at the end of its calls."""
         streak = 0
         for ev in reversed(self.events):
-            if ev.tool != tool:
+            if ev.ident != ident:
                 continue
             if ev.status == STATUS_OK:
                 break
@@ -147,18 +199,18 @@ def score_turn(turn: Turn | None, *, bad_threshold: int = 3, final: bool | None 
 
     unresolved_score = 0
     for ev in sorted(turn.unresolved, key=lambda e: e.at):
-        streak = turn.trailing_failures(ev.tool)
+        streak = turn.trailing_failures(ev.ident)
         # One failing command at the end can be benign (a grep with no matches); the same tool failing
         # again and again until the turn ends means the agent gave up on that step.
         weight = (2 if _is_heavy(ev.tool) else 1) + (1 if streak >= 2 else 0)
         unresolved_score += weight
         detail = f": {_clip(ev.error, 80)}" if ev.error else ""
         if ev.status == STATUS_BLOCKED:
-            reasons.append(f"{ev.tool} was blocked when the turn ended{detail}")
+            reasons.append(f"{ev.label} was blocked when the turn ended{detail}")
         elif streak >= 2:
-            reasons.append(f"{ev.tool} failed {streak} times in a row and never recovered{detail}")
+            reasons.append(f"{ev.label} failed {streak} times in a row and never recovered{detail}")
         else:
-            reasons.append(f"{ev.tool} was still failing when the turn ended{detail}")
+            reasons.append(f"{ev.label} was still failing when the turn ended{detail}")
     score += min(unresolved_score, 4)
 
     if turn.denials:
@@ -271,7 +323,8 @@ class EvidenceTracker:
                 return turn
         return sess.current
 
-    def record_tool(self, session_id: str, turn_id: str, tool_name: str, status: str, error: str = "") -> None:
+    def record_tool(self, session_id: str, turn_id: str, tool_name: str, status: str, error: str = "",
+                    key: str = "") -> None:
         if not session_id or not tool_name or tool_name in META_TOOLS:
             return
         with self._lock:
@@ -281,10 +334,10 @@ class EvidenceTracker:
                 turn = Turn(session_id=session_id, turn_id=turn_id or "implicit", started_at=self._clock())
                 sess.current = turn
             status = status if status in (STATUS_OK, STATUS_ERROR, STATUS_BLOCKED) else STATUS_OK
-            ev = ToolEvent(tool_name, status, _clip(error, 200), self._clock())
+            ev = ToolEvent(tool_name, status, _clip(error, 200), self._clock(), key or tool_name)
             if len(turn.events) < MAX_EVENTS_PER_TURN:
                 turn.events.append(ev)
-            turn.last_by_tool[tool_name] = ev
+            turn.last_by_tool[ev.ident] = ev
 
     def end_turn(self, session_id: str, turn_id: str = "", *, completed: bool | None = None,
                  failed: bool | None = None, interrupted: bool | None = None, exit_reason: str = "") -> None:

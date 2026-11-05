@@ -15,7 +15,7 @@ from typing import Any
 
 from . import report
 from .bridge import ORIGIN_FOREGROUND, ORIGIN_OTHER, ORIGIN_REVIEW, ORIGIN_UNKNOWN, HermesBridge
-from .evidence import EvidenceTracker, Turn, Verdict, score_turn
+from .evidence import EvidenceTracker, Turn, Verdict, command_key, score_turn
 from .gate import (
     ASK,
     KIND_BAD_RUN,
@@ -108,7 +108,8 @@ class Fledge:
         if not self.s.active or not self._foreground():
             return
         sid = self.tracker.resolve_session(session_id, task_id, turn_id)
-        self.tracker.record_tool(sid, turn_id, tool_name, status or "ok", str(error_message or error_type or ""))
+        self.tracker.record_tool(sid, turn_id, tool_name, status or "ok", str(error_message or error_type or ""),
+                                 key=command_key(tool_name, args))
         if tool_name in FILE_WRITE_TOOLS and (status or "ok") == "ok" and isinstance(args, dict):
             # The agent edited a skill file directly: that is an agent write, not a hand edit.
             hit = self.bridge.skill_for_path(str(args.get("path") or args.get("file_path") or ""))
