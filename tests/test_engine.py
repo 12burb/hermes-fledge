@@ -378,3 +378,19 @@ def test_restored_skill_starts_a_fresh_probation(engine, bridge):
     turn(engine, "g2", "next")
     rec = engine.ledger.get_skill("pull-water-results")
     assert rec["state"] == FLEDGLING and rec["clean_uses"] == 1 and rec["bad_uses"] == 0
+
+
+def test_declining_fledges_own_prompt_is_not_evidence_against_the_turn(engine, bridge):
+    """Review finding: Hermes reports Fledge's own ask as pattern_key 'plugin_rule:fledge:...'
+    (tools/approval.py request_tool_approval); a 'deny' there counted as a denied action."""
+    engine.hook_pre_llm_call(session_id=SID, turn_id="t1", user_message="x")
+    for tool, status, error in BAD_RUN:
+        engine.hook_post_tool_call(tool_name=tool, args={}, session_id=SID, turn_id="t1", status=status,
+                                   error_message=error)
+    directive = engine.hook_pre_tool_call(tool_name="skill_manage", args=CREATE, session_id=SID, turn_id="t1")
+    assert directive["action"] == "approve"
+    engine.hook_post_approval_response(choice="deny", session_id=SID, turn_id="t1",
+                                       pattern_key="plugin_rule:" + directive["rule_key"])
+    assert engine.tracker.current_turn(SID).denials == 0
+    engine.hook_post_approval_response(choice="deny", session_id=SID, turn_id="t1", pattern_key="rm_recursive")
+    assert engine.tracker.current_turn(SID).denials == 1

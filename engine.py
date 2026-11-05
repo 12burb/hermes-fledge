@@ -154,8 +154,12 @@ class Fledge:
 
     @_safe
     def hook_post_approval_response(self, choice: str = "", turn_id: str = "", session_key: str = "",
-                                  session_id: str = "", **_: Any) -> None:
+                                  session_id: str = "", pattern_key: str = "", **_: Any) -> None:
         if not self.s.active:
+            return
+        if str(pattern_key or "").startswith("plugin_rule:fledge:"):
+            # Fledge's own "save this skill?" prompt (tools/approval.py request_tool_approval): declining
+            # it is the user agreeing with Fledge, not evidence that the turn's work went wrong.
             return
         # Hermes adds the approving turn's session_id when it is bound (tools/approval_context.py).
         sid = self.tracker.resolve_session(session_id, turn_id=turn_id, session_key=session_key)
