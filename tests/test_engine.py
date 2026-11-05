@@ -409,3 +409,30 @@ def test_curator_delete_of_a_hand_edited_skill_is_held_and_replayable(engine, br
     assert directive["action"] == "block"
     assert bridge.staged[-1]["payload"] == {"action": "batch", "operations": delete["operations"]}
     assert bridge.staged[-1]["summary"].startswith("[fledge] proposal:")
+
+
+def test_the_birth_turn_is_not_counted_as_a_use(engine, bridge):
+    """Review finding: viewing a skill in the same turn that saved it counted toward graduating it."""
+    engine.hook_pre_llm_call(session_id=SID, turn_id="t1", user_message="save this as a skill")
+    assert engine.hook_pre_tool_call(tool_name="skill_manage", args=CREATE, session_id=SID, turn_id="t1") is None
+    engine.hook_on_skill_lifecycle(action="created", skill_name="pull-water-results", provenance="local",
+                                   session_id=SID)
+    engine.hook_on_skill_lifecycle(action="loaded", skill_name="pull-water-results", session_id=SID)
+    engine.hook_on_session_end(session_id=SID, turn_id="t1", completed=True)
+    turn(engine, "t2", "thanks")
+    rec = engine.ledger.get_skill("pull-water-results")
+    assert rec["state"] == FLEDGLING and rec["clean_uses"] == 0
+    assert engine.ledger.recent_uses("pull-water-results") == []
+
+
+def test_turns_recorded_before_mode_off_never_ground_later(engine, bridge, ctx):
+    turn(engine, "t1", "x")
+    review_save(engine, bridge)
+    turn(engine, "t2", "use it", BAD_RUN, skills=["pull-water-results"])
+    ctx.config["mode"] = "off"
+    engine.settings_loader.invalidate()
+    engine.hook_on_session_finalize(session_id=SID)
+    ctx.config["mode"] = "enforce"
+    engine.settings_loader.invalidate()
+    turn(engine, "t3", "hello again")
+    assert engine.ledger.recent_uses("pull-water-results") == []

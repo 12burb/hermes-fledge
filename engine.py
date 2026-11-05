@@ -364,6 +364,10 @@ class Fledge:
 
     def _settle(self) -> None:
         settings = self.s
+        if not settings.active:
+            # mode off: turns recorded earlier must not ground anything later; drop them.
+            self.tracker.drain_settled(0.0)
+            return
         for turn in self.tracker.drain_settled(settings.settle_seconds):
             verdict = score_turn(turn, bad_threshold=settings.bad_threshold, final=True)
             if verdict.bad:
@@ -380,6 +384,10 @@ class Fledge:
         record = self.ledger.get_skill(name) or self.ledger.ensure_skill(name, VETERAN)
         if record["state"] in (GROUNDED, ARCHIVED):
             return
+        if record.get("born_turn") and (record.get("born_session"), record.get("born_turn")) == \
+                (turn.session_id, turn.turn_id):
+            return  # the run it was learned from is its birth, not a use (a view right after saving, or the
+            # reviewed turn that used the previous version)
         if not self.ledger.add_use(name, int(record["generation"]), turn.session_id, turn.turn_id, verdict.level,
                                    verdict.score, list(verdict.reasons)):
             return
