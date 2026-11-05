@@ -19,7 +19,7 @@ from a command that was run, a log line, or the session DB of a real sandbox ses
 $ python -m pytest tests            # as received (commit 5176ad4)
 93 passed
 $ python -m pytest tests            # current
-102 passed
+117 passed
 ```
 
 ## 2. Source check (Hermes v0.22.7, `b200f5b`)
@@ -95,6 +95,16 @@ on Hermes' own vendored test fixtures; Fledge declares no dependencies, and vali
    keyed per program. `evidence.py`, 4 tests.
 5. **Live: second op of a one-skill batch looked ungated** (`skill_manage` fires `on_skill_lifecycle` per
    op). In-flight records now count ops. `engine.py`, 2 tests.
+
+Found in code review (each confirmed by running the code first, then fixed with a test):
+
+6. **Corrections:** curly apostrophes (`That’s wrong`, from phones / smart punctuation) were never detected,
+   and polite closers (`No, thanks.`, `Nope, that's it`, `no, all good`) scored a strong correction —
+   enough to ground and archive the skill saved the turn before. `corrections.py`, 3 tests.
+7. **Relapse/restore kept the old bad-run count:** the next run, even a clean one, grounded and archived the
+   skill ("2 of its 6 runs on probation went wrong (no problems found)"). `ledger.py`, `engine.py`, 2 tests.
+8. **Declining Fledge's own prompt counted as a denied action** against the turn (`pattern_key`
+   `plugin_rule:fledge:…`, `tools/approval.py:1154-1172`). `engine.py`, 1 test.
 
 ## Open findings (not code bugs)
 
