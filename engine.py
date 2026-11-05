@@ -152,10 +152,11 @@ class Fledge:
 
     @_safe
     def hook_post_approval_response(self, choice: str = "", turn_id: str = "", session_key: str = "",
-                                  **_: Any) -> None:
+                                  session_id: str = "", **_: Any) -> None:
         if not self.s.active:
             return
-        sid = self.tracker.resolve_session(turn_id=turn_id, session_key=session_key)
+        # Hermes adds the approving turn's session_id when it is bound (tools/approval_context.py).
+        sid = self.tracker.resolve_session(session_id, turn_id=turn_id, session_key=session_key)
         self.tracker.record_denial(sid, turn_id, choice)
 
     # ============================================================================================
@@ -315,6 +316,10 @@ class Fledge:
     def _hold(self, args: Any, ops: list[SkillOp], batch: bool, decision: Decision, sid: str,
               origin: str) -> dict[str, Any]:
         payload = staging_payload(args if isinstance(args, dict) else {}, ops, batch)
+        if batch and isinstance(args, dict) and args.get("name") and any(not o.op.get("name") for o in ops):
+            # Legacy top-level default name: /skills approve replays it as skill_manage(name=...) ->
+            # default_name, so ops that relied on it still resolve.
+            payload["name"] = args["name"]
         digest = payload_digest(payload)
         previous = self.ledger.find_hold(digest)
         if previous is not None and previous.get("pending_id"):

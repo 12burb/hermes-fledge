@@ -294,3 +294,25 @@ def test_review_held_writes_from_any_chat(engine, bridge):
     assert bridge.commands == [["diff", "p0001"], ["approve", "p0001"]]
     assert "not holding" in engine.command("pending")
     assert "Held for your review" not in engine.command("status")
+
+
+def test_denied_approval_uses_the_session_id_hermes_sends(engine, bridge):
+    """Two live sessions: the session_key can't be matched, but Hermes' approval hook carries session_id."""
+    engine.hook_pre_llm_call(session_id="sess-a", turn_id="ta", user_message="one")
+    engine.hook_pre_llm_call(session_id="sess-b", turn_id="tb", user_message="two")
+    engine.hook_post_approval_response(choice="deny", session_key="agent:main:cli:x", session_id="sess-b",
+                                       turn_id="")
+    assert engine.tracker.current_turn("sess-b").denials == 1
+    assert engine.tracker.current_turn("sess-a").denials == 0
+
+
+def test_held_batch_keeps_the_legacy_default_name_for_replay(engine, bridge):
+    turn(engine, "t1", "pull the water results", BAD_RUN)
+    args = {"name": "pull-water-results", "operations": [
+        {"action": "patch", "old_string": "steps", "new_string": "steps (retry on 404)"}]}
+    bridge.hashes["pull-water-results"] = ""
+    directive = review_save(engine, bridge, args=args)
+    assert directive["action"] == "block"
+    payload = bridge.staged[-1]["payload"]
+    assert payload["action"] == "batch" and payload["name"] == "pull-water-results"
+    assert payload["operations"] == args["operations"]
