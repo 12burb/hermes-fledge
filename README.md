@@ -131,13 +131,13 @@ Where no public plugin seam exists yet, Fledge calls the same functions Hermes' 
 - Correction detection is a phrase list over the start of your next message, tuned to miss rather than misfire (a casual "no worries" never counts).
 - Hand edits are detected by fingerprint: Fledge knows a skill's last agent-written state once it has seen the agent write it (or after `hermes fledge scan`). An edit made through a shell command by the agent also looks like a hand edit; that errs on the side of protecting the skill.
 - Turn evidence lives in memory; a restart forgets runs in flight (probation counts already recorded are kept).
-- Tool status is what Hermes reports. A compound shell command (`./fetch.sh; rm tmp`) reports the exit status of its last part, so a failure earlier in it is not seen. Fledge does not guess from output text.
+- Tool status is what Hermes reports. A compound shell command (`./fetch.sh; rm tmp`) reports the exit status of its last part. When the command prints its own `$?` behind a label (`echo "exit=$?"`, `ec=$?; echo "exit_code=$ec"`, a common agent pattern), Fledge reads that exact label back and judges the program before it; otherwise a failure earlier in the command is not seen. Fledge never guesses from other output text.
 - Deletes are protected only for hand-edited skills; a hand edit made before Fledge saw the skill is recognized after `hermes fledge scan`.
 
 ## Development
 
 ```bash
-python -m pytest tests          # 124 tests, no Hermes install needed (Hermes surfaces are faked)
+python -m pytest tests          # 128 tests, no Hermes install needed (Hermes surfaces are faked)
 hermes plugins doctor . --ci    # real discovery, register(), hooks — in a temp HERMES_HOME
 hermes plugins validate .       # catalog admission checks
 ```

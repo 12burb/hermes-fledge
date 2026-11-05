@@ -18,6 +18,8 @@ First release, built for the Nous Research Hermes Agent Plugin Hackathon.
 
 Validated against Hermes v0.22.7 before release (see VALIDATION.md), which changed:
 
+- A compound command that prints its own `$?` (`./fetch.sh; echo "exit=$?"; cat out`) is judged by that
+  status, not by the overall exit 0 Hermes reports for its last part.
 - Terminal failures are judged per program: a later successful `rm tmp.txt` no longer "recovers" a failed
   `./fetch.sh`.
 - A gated batch with several ops on one skill is attributed to its run (one lifecycle event per op).

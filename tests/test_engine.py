@@ -436,3 +436,30 @@ def test_turns_recorded_before_mode_off_never_ground_later(engine, bridge, ctx):
     engine.settings_loader.invalidate()
     turn(engine, "t3", "hello again")
     assert engine.ledger.recent_uses("pull-water-results") == []
+
+
+def test_failure_hidden_inside_a_compound_command_is_seen(engine, bridge):
+    """Live finding (Hermes 0.22.7, take 3): the agent ran the failing script inside one compound command that
+    echoed its $? and then cat'ed files; Hermes reported exit_code 0, so the failure was invisible."""
+    import json
+    from test_evidence import TAKE_3, TAKE_3_OUT
+    engine.hook_pre_llm_call(session_id=SID, turn_id="t1", user_message="Run ./fetch_water.sh into results.csv")
+    for _ in range(2):  # the agent retried once
+        engine.hook_post_tool_call(tool_name="terminal", args={"command": TAKE_3}, session_id=SID, turn_id="t1",
+                                   status="ok", result=json.dumps({"output": TAKE_3_OUT, "exit_code": 0}))
+    engine.hook_post_tool_call(tool_name="terminal", args={"command": "cp /tmp/water_stdout.csv results.csv"},
+                               session_id=SID, turn_id="t1", status="ok",
+                               result=json.dumps({"output": "", "exit_code": 0}))
+    engine.hook_on_session_end(session_id=SID, turn_id="t1", completed=True)
+    directive = review_save(engine, bridge)
+    assert directive["action"] == "block"
+    assert "terminal (./fetch_water.sh) failed 2 times in a row" in bridge.staged[-1]["summary"]
+
+
+def test_a_compound_command_whose_parts_succeeded_stays_clean(engine, bridge):
+    import json
+    engine.hook_pre_llm_call(session_id=SID, turn_id="t1", user_message="run the tests")
+    engine.hook_post_tool_call(tool_name="terminal", args={"command": 'pytest -q; echo "exit=$?"'}, session_id=SID,
+                               turn_id="t1", status="ok", result=json.dumps({"output": "5 passed\nexit=0"}))
+    engine.hook_on_session_end(session_id=SID, turn_id="t1", completed=True)
+    assert review_save(engine, bridge) is None

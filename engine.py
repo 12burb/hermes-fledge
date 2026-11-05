@@ -15,7 +15,7 @@ from typing import Any
 
 from . import report
 from .bridge import ORIGIN_FOREGROUND, ORIGIN_OTHER, ORIGIN_REVIEW, ORIGIN_UNKNOWN, HermesBridge
-from .evidence import EvidenceTracker, Turn, Verdict, command_key, score_turn
+from .evidence import EvidenceTracker, Turn, Verdict, captured_exit_statuses, command_key, score_turn
 from .gate import (
     ASK,
     KIND_BAD_RUN,
@@ -42,6 +42,19 @@ FILE_WRITE_TOOLS = frozenset({"write_file", "patch", "file_edit", "edit_file"})
 _INFLIGHT_TTL = 300.0
 _HOOKS = ("pre_llm_call", "pre_tool_call", "post_tool_call", "on_session_end", "on_session_finalize",
           "on_session_reset", "on_skill_lifecycle", "pre_command", "post_approval_response")
+
+
+def _tool_output(result: Any) -> str:
+    """The text a tool printed: ``output`` of Hermes' JSON tool result, else the result as text."""
+    if isinstance(result, dict):
+        return str(result.get("output") or "")
+    if isinstance(result, str):
+        try:
+            parsed = json.loads(result)
+        except (ValueError, TypeError):
+            return result
+        return str(parsed.get("output") or "") if isinstance(parsed, dict) else result
+    return ""
 
 
 def _safe(fn: Callable) -> Callable:
@@ -106,12 +119,22 @@ class Fledge:
     @_safe
     def hook_post_tool_call(self, tool_name: str = "", args: Any = None, session_id: str = "", task_id: str = "",
                           turn_id: str = "", status: str = "", error_type: Any = None, error_message: Any = None,
-                          **_: Any) -> None:
+                          result: Any = None, **_: Any) -> None:
         if not self.s.active or not self._foreground():
             return
         sid = self.tracker.resolve_session(session_id, task_id, turn_id)
-        self.tracker.record_tool(sid, turn_id, tool_name, status or "ok", str(error_message or error_type or ""),
-                                 key=command_key(tool_name, args))
+        captured = []
+        if (status or "ok") == "ok" and isinstance(args, dict) and tool_name == "terminal":
+            captured = captured_exit_statuses(str(args.get("command") or ""), _tool_output(result))
+        if captured:
+            # The command printed its own parts' exit statuses ($?): those are the real outcomes; the overall
+            # "ok" is only the status of its last part.
+            for key, code in captured:
+                self.tracker.record_tool(sid, turn_id, tool_name, "error" if code else "ok",
+                                         f"exit {code} (reported by the command's own $?)" if code else "", key=key)
+        else:
+            self.tracker.record_tool(sid, turn_id, tool_name, status or "ok", str(error_message or error_type or ""),
+                                     key=command_key(tool_name, args))
         if tool_name in FILE_WRITE_TOOLS and (status or "ok") == "ok" and isinstance(args, dict):
             # The agent edited a skill file directly: that is an agent write, not a hand edit.
             hit = self.bridge.skill_for_path(str(args.get("path") or args.get("file_path") or ""))

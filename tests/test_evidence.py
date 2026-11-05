@@ -180,3 +180,28 @@ def test_command_key_shapes():
     assert command_key("terminal", {"command": r"C:\tools\x.exe /q"}) == "terminal:C:/tools/x.exe"
     assert command_key("terminal", {"command": ""}) == "terminal"
     assert command_key("write_file", {"path": "a"}) == "write_file"
+
+
+# The exact commands glm-5.3 wrote in the live takes on Hermes 0.22.7 (Hermes reported exit_code 0 for both).
+TAKE_3 = ('./fetch_water.sh > /tmp/water_stdout.csv 2> /tmp/water_stderr.txt; echo "exit=$?"; '
+          'echo "--- stdout ---"; cat /tmp/water_stdout.csv; echo "--- stderr ---"; cat /tmp/water_stderr.txt')
+TAKE_3_OUT = ("exit=1\n--- stdout ---\nsite,sampled_on,nitrate_mg_l\nWabash-03,2026-10-02,4.1\n--- stderr ---\n"
+              "error: GET /water/results?page=2 -> HTTP 404 Not Found\n")
+TAKE_2 = ('./fetch_water.sh > results.csv 2> _fw_stderr.log; ec=$?; echo "exit_code=$ec"; '
+          "echo '--- results.csv ---'; cat results.csv; rm -f _fw_stderr.log")
+
+
+def test_exit_status_the_command_printed_itself_is_read():
+    from fledge.evidence import captured_exit_statuses
+    assert captured_exit_statuses(TAKE_3, TAKE_3_OUT) == [("terminal:./fetch_water.sh", 1)]
+    assert captured_exit_statuses(TAKE_2, "exit_code=1\n--- results.csv ---\n") == [("terminal:./fetch_water.sh", 1)]
+    assert captured_exit_statuses('make test || echo "FAILED with $?"', "FAILED with 2") == [("terminal:make", 2)]
+    assert captured_exit_statuses('pytest; echo "exit=$?"', "exit=0") == [("terminal:pytest", 0)]
+
+
+def test_no_label_or_no_echo_means_nothing_is_read():
+    from fledge.evidence import captured_exit_statuses
+    assert captured_exit_statuses("./x.sh; echo $?", "1") == []          # a bare number proves nothing
+    assert captured_exit_statuses("./x.sh; cat out", "exit=1") == []     # the command never printed $?
+    assert captured_exit_statuses('./x.sh; echo "exit=$?"', "no status here") == []
+    assert captured_exit_statuses("", "") == []

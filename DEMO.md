@@ -76,7 +76,7 @@ Caption: *Self-improvement, without overwriting the person who improved it first
 > **Fledge** — skills have to earn their wings.
 > No model grades the model. 9 hooks · MIT · `hermes plugins install <owner>/hermes-fledge`
 
-B-roll worth having: `python -m pytest tests` (124 passed) and `hermes plugins validate .` (green).
+B-roll worth having: `python -m pytest tests` (128 passed) and `hermes plugins validate .` (green).
 
 ## Narration (one voice, about 175 words, ~75 seconds)
 

@@ -59,6 +59,28 @@ _WRAPPERS = frozenset({"sudo", "env", "time", "nice", "nohup", "command", "exec"
 _INTERPRETERS = re.compile(r"^(python[0-9.]*|py|node|deno|bun|ruby|perl|php|bash|sh|zsh|pwsh|powershell|uv|npx)$")
 
 
+def _segment_program(segment: str) -> str | None:
+    """The program one shell segment runs (``python fetch.py`` for interpreters), or None for setup."""
+    segment = segment.replace("\\", "/")  # Windows paths: POSIX shlex would eat the backslashes
+    try:
+        tokens = shlex.split(segment, posix=True)
+    except ValueError:
+        tokens = segment.split()
+    tokens = [t for t in tokens if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", t)]  # FOO=bar prefixes
+    while tokens and tokens[0] in _WRAPPERS:
+        tokens = tokens[1:]
+        while tokens and tokens[0].startswith("-"):
+            tokens = tokens[1:]
+    if not tokens or tokens[0] in _SETUP_PROGRAMS:
+        return None
+    program = tokens[0]
+    if _INTERPRETERS.match(program.rsplit("/", 1)[-1].lower()):
+        script = next((t for t in tokens[1:] if not t.startswith("-")), "")
+        if script:
+            program = f"{program.rsplit('/', 1)[-1]} {script}"
+    return program[:80]
+
+
 def command_key(tool_name: str, args: object) -> str:
     """Identity of a tool call for recovery tracking: ``terminal:<program>`` for shell commands (with the
     script for interpreters, e.g. ``terminal:python fetch.py``), else the tool name."""
@@ -66,25 +88,61 @@ def command_key(tool_name: str, args: object) -> str:
         return tool_name
     command = str(args.get("command") or "").strip()
     for segment in _SEGMENT_SPLIT.split(command):
-        segment = segment.replace("\\", "/")  # Windows paths: POSIX shlex would eat the backslashes
-        try:
-            tokens = shlex.split(segment, posix=True)
-        except ValueError:
-            tokens = segment.split()
-        tokens = [t for t in tokens if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", t)]  # FOO=bar prefixes
-        while tokens and tokens[0] in _WRAPPERS:
-            tokens = tokens[1:]
-            while tokens and tokens[0].startswith("-"):
-                tokens = tokens[1:]
-        if not tokens or tokens[0] in _SETUP_PROGRAMS:
-            continue
-        program = tokens[0]
-        if _INTERPRETERS.match(program.rsplit("/", 1)[-1].lower()):
-            script = next((t for t in tokens[1:] if not t.startswith("-")), "")
-            if script:
-                program = f"{program.rsplit('/', 1)[-1]} {script}"
-        return f"{tool_name}:{program[:80]}"
+        program = _segment_program(segment)
+        if program:
+            return f"{tool_name}:{program}"
     return tool_name
+
+
+# A compound command reports the exit status of its LAST part, so ``./fetch.sh > out; echo "exit=$?"; cat
+# out`` comes back as success even when ./fetch.sh failed. Agents write this shape all the time. When the
+# command itself prints the shell's ``$?`` behind a label (``echo "exit=$?"``, or ``ec=$?`` ... ``echo
+# "exit_code=$ec"``), that label + number in the output IS the shell's own report for the program just
+# before it: read exactly that, nothing else. No label, no reading (a bare number proves nothing).
+_LABEL = r"([A-Za-z][\w:= -]{0,30}?)"
+_STATUS_VAR = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)=\$\?\s*$")
+
+
+def _previous_program(segments: list[str], index: int) -> str | None:
+    for segment in reversed(segments[:index]):
+        if "$?" in segment or _STATUS_VAR.match(segment):
+            return None  # $? of a status echo: not a program run
+        program = _segment_program(segment)
+        if program:
+            return program
+    return None
+
+
+def captured_exit_statuses(command: str, output: str) -> list[tuple[str, int]]:
+    """``[("terminal:<program>", exit_code), ...]`` the command printed for its own parts via ``$?``."""
+    if not command or not output or "$?" not in command:
+        return []
+    segments = _SEGMENT_SPLIT.split(command)
+    found: list[tuple[str, str]] = []  # (program, label)
+    for i, segment in enumerate(segments):
+        var = _STATUS_VAR.match(segment)
+        if var:
+            name = var.group(1)
+            program = _previous_program(segments, i)
+            ref = re.compile(_LABEL + r"\$\{?" + re.escape(name) + r"\}?(?!\w)")
+            label = next((m.group(1) for later in segments[i + 1:] for m in [ref.search(later)] if m), None)
+            if program and label:
+                found.append((program, label))
+            continue
+        if "$?" in segment:
+            m = re.search(_LABEL + r"\$\?", segment)
+            program = _previous_program(segments, i)
+            if m and program:
+                found.append((program, m.group(1)))
+    statuses: list[tuple[str, int]] = []
+    position = 0
+    for program, label in found:
+        m = re.compile(re.escape(label.rstrip()) + r"\s*(\d{1,3})\b").search(output, position)
+        if m is None:
+            continue
+        position = m.end()
+        statuses.append((f"terminal:{program}", int(m.group(1))))
+    return statuses
 
 
 def _clip(text: str | None, limit: int = 120) -> str:
