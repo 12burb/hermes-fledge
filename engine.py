@@ -513,7 +513,7 @@ class Fledge:
         if result is None:
             return f"Fledge can't reach Hermes' review queue here. In the Hermes CLI run: /skills {action} {pending_id}"
         if action in ("approve", "reject"):
-            self.ledger.add_event(f"{action}d", "", pending_id)
+            self.ledger.add_event({"approve": "approved", "reject": "rejected"}[action], "", pending_id)
         return result
 
     def set_mode(self, mode: str) -> str:

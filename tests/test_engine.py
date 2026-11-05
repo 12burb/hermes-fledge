@@ -474,3 +474,11 @@ def test_retry_written_as_one_if_else_command_is_held(engine, bridge):
     engine.hook_on_session_end(session_id=SID, turn_id="t1", completed=True)
     assert review_save(engine, bridge)["action"] == "block"
     assert "terminal (./fetch_water.sh) failed 2 times in a row" in bridge.staged[-1]["summary"]
+
+
+def test_review_decisions_are_logged_with_real_words(engine, bridge):
+    """Live finding (Hermes 0.22.7): /fledge reject logged the event kind 'rejectd'."""
+    turn(engine, "t1", "x", BAD_RUN)
+    review_save(engine, bridge)
+    engine._review("reject", "p0001")
+    assert engine.ledger.recent_events(1)[0]["kind"] == "rejected"
