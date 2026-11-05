@@ -71,9 +71,9 @@ def user_hold_notice(decision: Decision, pending_id: str | None) -> str:
     names = _names(decision.skills)
     if decision.kind == KIND_HAND_TUNED:
         if pending_id:
-            return (f"Hermes tried to rewrite {names}, which you edited by hand. Saved as a proposal instead: "
+            return (f"Hermes tried to change {names}, which you edited by hand. Saved as a proposal instead: "
                     f"/fledge diff {pending_id}, then /fledge approve {pending_id} or /fledge reject {pending_id}.")
-        return f"Hermes tried to rewrite {names}, which you edited by hand. Fledge blocked it."
+        return f"Hermes tried to change {names}, which you edited by hand. Fledge blocked it."
     if pending_id:
         return (f"held skill {names}: it was learned from a run that went wrong ({_short(decision.reasons)}). "
                 f"Review: /fledge diff {pending_id}, then /fledge approve {pending_id} or /fledge reject {pending_id}.")

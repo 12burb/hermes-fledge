@@ -78,3 +78,12 @@ def test_hand_tuned_rewrites_become_proposals_or_questions():
 def test_deletes_and_off_mode_pass_through():
     assert _decide({"action": "delete", "name": "x"}).action == ALLOW
     assert _decide(CREATE_BATCH, settings=Settings(mode="off")).action == ALLOW
+
+
+def test_hand_tuned_deletes_become_proposals_but_deletes_are_never_held_for_bad_runs():
+    """Review finding: only rewrites were protected; a curator consolidation could delete a hand-edited skill."""
+    delete = {"action": "delete", "name": "lights", "absorbed_into": "home-automation"}
+    d = _decide(delete, verdict=CLEAN, tuned=["lights"])
+    assert d.action == HOLD and d.kind == KIND_HAND_TUNED and "deletes become proposals" in d.reasons[0]
+    assert _decide(delete, origin="foreground", verdict=CLEAN, tuned=["lights"]).action == ASK
+    assert _decide(delete, verdict=BAD).action == ALLOW

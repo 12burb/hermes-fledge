@@ -16,6 +16,9 @@ from .settings import Settings
 
 MUTATING = ("create", "edit", "patch", "write_file", "remove_file")
 REWRITES = ("edit", "patch", "write_file", "remove_file")
+# Changes that would undo a user's hand edit: rewrites, plus delete (a curator consolidation deletes the
+# absorbed skill). Only the hand-edit rule looks at deletes; a delete is never held for a bad run.
+PROTECTED = REWRITES + ("delete",)
 _FLAT_KEYS = ("content", "category", "file_path", "file_content", "old_string", "new_string",
               "absorbed_into", "replace_all")
 
@@ -86,6 +89,11 @@ def mutating_ops(ops: list[SkillOp]) -> list[SkillOp]:
     return [o for o in ops if o.action in MUTATING and o.name]
 
 
+def protected_ops(ops: list[SkillOp]) -> list[SkillOp]:
+    """Ops that would change or remove an existing skill (checked against hand edits)."""
+    return [o for o in ops if o.action in PROTECTED and o.name]
+
+
 def decide(ops: list[SkillOp], *, origin: str, verdict: Verdict, hand_tuned: list[str], settings: Settings,
            unattended: bool) -> Decision:
     """Decide on one skill_manage call.
@@ -97,18 +105,21 @@ def decide(ops: list[SkillOp], *, origin: str, verdict: Verdict, hand_tuned: lis
     * Everything else is allowed (and goes on probation once it lands).
     """
     targets = mutating_ops(ops)
-    if not targets or not settings.active:
+    guarded = protected_ops(ops)
+    if not (targets or guarded) or not settings.active:
         return Decision()
     autonomous = origin in ("review", "unknown")
 
-    tuned_targets = sorted({o.name for o in targets if o.action in REWRITES and o.name in hand_tuned})
+    tuned_targets = sorted({o.name for o in guarded if o.name in hand_tuned})
     if tuned_targets and settings.protect_hand_edits:
-        reasons = [f"'{name}' was edited by hand, so autonomous rewrites become proposals" for name in tuned_targets]
+        deleting = {o.name for o in guarded if o.action == "delete"}
+        reasons = [f"'{name}' was edited by hand, so autonomous "
+                   f"{'deletes' if name in deleting else 'rewrites'} become proposals" for name in tuned_targets]
         if autonomous or unattended:
             return Decision(HOLD, KIND_HAND_TUNED, reasons, tuned_targets)
         return Decision(ASK, KIND_HAND_TUNED, reasons, tuned_targets)
 
-    if verdict.bad:
+    if verdict.bad and targets:
         names = sorted({o.name for o in targets})
         reasons = list(verdict.reasons)
         if autonomous:

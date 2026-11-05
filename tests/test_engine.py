@@ -394,3 +394,18 @@ def test_declining_fledges_own_prompt_is_not_evidence_against_the_turn(engine, b
     assert engine.tracker.current_turn(SID).denials == 0
     engine.hook_post_approval_response(choice="deny", session_id=SID, turn_id="t1", pattern_key="rm_recursive")
     assert engine.tracker.current_turn(SID).denials == 1
+
+
+def test_curator_delete_of_a_hand_edited_skill_is_held_and_replayable(engine, bridge):
+    bridge.hashes["lights"] = "h1"
+    turn(engine, "t1", "x")
+    review_save(engine, bridge, args={"operations": [{"action": "create", "name": "lights", "content": "v1"}]})
+    bridge.hashes["lights"] = "h2"  # the user tuned it by hand
+    turn(engine, "t2", "turn on the porch lights")
+    delete = {"operations": [{"action": "delete", "name": "lights", "absorbed_into": "home-automation"}]}
+    bridge.origin = "review"
+    directive = engine.hook_pre_tool_call(tool_name="skill_manage", args=delete, session_id=SID)
+    bridge.origin = "foreground"
+    assert directive["action"] == "block"
+    assert bridge.staged[-1]["payload"] == {"action": "batch", "operations": delete["operations"]}
+    assert bridge.staged[-1]["summary"].startswith("[fledge] proposal:")

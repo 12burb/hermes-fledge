@@ -20,12 +20,13 @@ from .gate import (
     ASK,
     KIND_BAD_RUN,
     KIND_HAND_TUNED,
-    REWRITES,
+    PROTECTED,
     Decision,
     SkillOp,
     decide,
     mutating_ops,
     parse_ops,
+    protected_ops,
     payload_digest,
     skill_key,
     staging_payload,
@@ -249,13 +250,14 @@ class Fledge:
             return None
         ops, batch = parse_ops(args)
         targets = mutating_ops(ops)
-        if not targets:
+        guarded = protected_ops(ops)
+        if not targets and not guarded:
             return None
         origin = self.bridge.write_origin()
         sid = self.tracker.resolve_session(session_id, task_id, turn_id)
         turn = self._evidence_turn(sid, origin)
         verdict = score_turn(turn, bad_threshold=settings.bad_threshold)
-        hand_tuned = self._hand_tuned(targets, sid)
+        hand_tuned = self._hand_tuned(guarded, sid)
         decision = decide(ops, origin=origin, verdict=verdict, hand_tuned=hand_tuned, settings=settings,
                           unattended=origin == ORIGIN_REVIEW or self.bridge.is_unattended())
         if decision.allowed:
@@ -288,7 +290,7 @@ class Fledge:
         tuned: list[str] = []
         protect = self.s.protect_hand_edits
         for op in targets:
-            if op.action not in REWRITES:
+            if op.action not in PROTECTED:
                 continue
             record = self.ledger.get_skill(op.name)
             if record is None:
