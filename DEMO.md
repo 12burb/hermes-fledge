@@ -27,7 +27,7 @@ does (it will "remember" the script fails and skip the retry).
 
 ## Beat 1 — the save gate (0:05–0:30)
 
-1. Prompt: `Run ./fetch_water.sh and turn what it returns into results.csv`
+1. Prompt: `Run ./fetch_water.sh and turn what it returns into results.csv. The server is flaky, so retry once if it fails.`
    The script prints two rows, then fails with an HTTP 404 and exits 1. Hermes usually retries, then writes
    a partial file and wraps up. (If it gives up after a single failure, Fledge rates the run unclear, since
    one failing command can be harmless, and lets the save through. Retake. Do not show the script's source
