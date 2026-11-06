@@ -2,14 +2,16 @@ Fledge smoke log — raw output collected on 2026-11-05 (Central) from throwaway
 fledge-sandbox/smoke.sh. Only edit: the local Windows user path is replaced with %USERPROFILE% / ~.
 Homes: 0.23.0 = %USERPROFILE%\fh\n (installed with `hermes plugins install 12burb/hermes-fledge`),
 0.22.7 = %USERPROFILE%\fh\m (demo home). Model: glm-5.3 via OpenCode Go. Windows 11 ARM64.
+Fault injected in one 0.23.0 take (visible below): pending/skills replaced by a file so Hermes could not
+stage writes; restored afterwards.
 
 ==================== Fledge under test ====================
 
 $ git -C %USERPROFILE%/hermes-tools/hermes-fledge log --oneline -1
-057bc97 SUBMISSION.md: Nov 11 is a Wednesday; link the announcement post
+2225915 Local notices posted between turns are re-published once at the next turn (the CLI only reads events mid-turn)
 
 $ git -C %USERPROFILE%/fh/n/plugins/fledge log --oneline -1   # copy installed in the 0.23.0 home
-057bc97 SUBMISSION.md: Nov 11 is a Wednesday; link the announcement post
+2225915 Local notices posted between turns are re-published once at the next turn (the CLI only reads events mid-turn)
 
 ==================== Hermes 0.23.0 (throwaway HERMES_HOME, own gateway) ====================
 
@@ -74,11 +76,11 @@ Validation passed.
 
 $ cd ~/hermes-tools/hermes-fledge && env -u PYTHONPATH .venv/Scripts/python.exe --version && env -u PYTHONPATH .venv/Scripts/python.exe -m pytest tests -p no:cacheprovider | grep -a passed
 Python 3.14.7
-143 passed in 0.75s
+150 passed in 0.62s
 
 $ cd ~/hermes-tools/hermes-fledge && env -u PYTHONPATH %USERPROFILE%/AppData/Local/Temp/py311/Scripts/python.exe --version && env -u PYTHONPATH %USERPROFILE%/AppData/Local/Temp/py311/Scripts/python.exe -m pytest tests -p no:cacheprovider | grep -a passed
 Python 3.11.16
-143 passed in 1.27s
+150 passed in 0.60s
 
 ==================== 0.23.0 live sessions: what the agent ran (state.db, read-only, all sessions) ====================
 
@@ -193,10 +195,105 @@ USER They're mixed row by row. Use the dates from fetch_water.sh where a site ap
   ASSISTANT Operation interrupted: waiting for model response (11.5s elapsed).
   ASSISTANT Gateway shutting down: this turn was interrupted and will not be run again. Send your message again once Hermes is back.
 
+--- session local-62e4de15902b0271
+USER Run ./fetch_water.sh and turn what it returns into results.csv. The server is flaky, so retry once if it fails.
+  CALL read_file {"path": "%USERPROFILE%\\hermes-tools\\fledge-sandbox\\work-23\\fetch_water.sh"}
+  CALL search_files {"pattern": "*", "path": "%USERPROFILE%\\hermes-tools\\fledge-sandbox\\work-23", "target": "files"}
+    -> read_file {"content": "1|#!/bin/sh\n2|# Fetch the latest water test results as CSV on stdout.\n3|echo \"site,sampled_on,nitrate_mg_l\"\n4|echo \"Wabash-03,2026-10-02,4.1\"\n5|echo \"Wabash-07,2026-10-02,3.8\"\n6|echo \"error: GET 
+    -> search_files {"total_count": 2, "files": ["%USERPROFILE%/hermes-tools/fledge-sandbox/work-23\\readings.csv", "%USERPROFILE%/hermes-tools/fledge-sandbox/work-23\\fetch_water.sh"]}
+  CALL read_file {"path": "%USERPROFILE%\\hermes-tools\\fledge-sandbox\\work-23\\readings.csv"}
+  CALL terminal {"command": "./fetch_water.sh > \"$TMPDIR/water_out.txt\" 2> \"$TMPDIR/water_err.txt\"; echo \"exit_code=$?\"; echo \"=== STDOUT ===\"; cat \"$TMPDIR/water_out.txt\"; echo \"=== STDERR ===\"; cat \"$TMPDIR/water_err.txt\""}
+    -> read_file {"content": "1|site,sampled_on,nitrate_mg_l,ecoli_cfu_100ml\n2|Wabash-03,02/10/2026,4.1,126\n3|Wabash-07,10/02/2026,3.8,88\n4|Tippecanoe-11,2026-10-03,7.9,410\n5|White-River-02,3 Oct 2026,2.2,35\n6|Eel-05,10/04/2026,11.3
+    -> terminal {"output": "exit_code=1\n=== STDOUT ===\nsite,sampled_on,nitrate_mg_l\nWabash-03,2026-10-02,4.1\nWabash-07,2026-10-02,3.8\n=== STDERR ===\nerror: GET /water/results?page=2 -> HTTP 404 Not Found", "exit_code": 0, "error":
+  CALL terminal {"command": "./fetch_water.sh > \"$TMPDIR/water_out2.txt\" 2> \"$TMPDIR/water_err2.txt\"; echo \"exit_code=$?\"; echo \"=== STDOUT ===\"; cat \"$TMPDIR/water_out2.txt\"; echo \"=== STDERR ===\"; cat \"$TMPDIR/water_err2.txt\""}
+  ASSISTANT The script failed (exit 1 — page 2 returned HTTP 404), but it did emit valid CSV rows on stdout. Retrying once as instructed:
+    -> terminal {"output": "exit_code=1\n=== STDOUT ===\nsite,sampled_on,nitrate_mg_l\nWabash-03,2026-10-02,4.1\nWabash-07,2026-10-02,3.8\n=== STDERR ===\nerror: GET /water/results?page=2 -> HTTP 404 Not Found", "exit_code": 0, "error":
+  CALL write_file {"path": "%USERPROFILE%\\hermes-tools\\fledge-sandbox\\work-23\\results.csv", "content": "site,sampled_on,nitrate_mg_l\nWabash-03,2026-10-02,4.1\nWabash-07,2026-10-02,3.8\n"}
+  ASSISTANT Retry also failed with the same 404 on page 2. Both runs returned identical output on stdout: a clean CSV header plus 2 rows (the error line went to stderr, not stdout). Writing that to results.csv:
+    -> write_file {"bytes_written": 79, "dirs_created": true, "verified": true, "lint": {"status": "skipped", "message": "No linter for .csv files"}, "resolved_path": "%USERPROFILE%\\hermes-tools\\fledge-sandbox\\work-23\\results.csv",
+  ASSISTANT Done. What happened:  - Ran ./fetch_water.sh → exit 1, with "error: GET /water/results?page=2 -> HTTP 404 Not Found" on stderr - Retried once as you asked → same failure, identical output - The stdout
+
+--- session local-9a483cb330d01cce
+USER Run ./fetch_water.sh and turn what it returns into results.csv. The server is flaky, so retry once if it fails.
+  CALL read_file {"path": "./fetch_water.sh"}
+  CALL terminal {"command": "pwd && ls -la"}
+    -> read_file {"content": "1|#!/bin/sh\n2|# Fetch the latest water test results as CSV on stdout.\n3|echo \"site,sampled_on,nitrate_mg_l\"\n4|echo \"Wabash-03,2026-10-02,4.1\"\n5|echo \"Wabash-07,2026-10-02,3.8\"\n6|echo \"error: GET 
+    -> terminal {"output": "~/hermes-tools/fledge-sandbox/work-23\ntotal 10\ndrwxr-xr-x 1 user 197609   0 Nov  5 22:54 .\ndrwxr-xr-x 1 user 197609   0 Nov  5 22:23 ..\n-rwxr-xr-x 1 user 197609 239 Nov  5 21:49 fetch_wate
+  CALL terminal {"command": "./fetch_water.sh > /tmp/water_try1.out 2> /tmp/water_try1.err; echo \"exit=$?\"; echo \"--- stdout ---\"; cat /tmp/water_try1.out; echo \"--- stderr ---\"; cat /tmp/water_try1.err"}
+  ASSISTANT The script prints CSV to stdout and exits 1 on failure. Running it now:
+    -> terminal {"output": "exit=1\n--- stdout ---\nsite,sampled_on,nitrate_mg_l\nWabash-03,2026-10-02,4.1\nWabash-07,2026-10-02,3.8\n--- stderr ---\nerror: GET /water/results?page=2 -> HTTP 404 Not Found", "exit_code": 0, "error": null
+  CALL terminal {"command": "./fetch_water.sh > /tmp/water_try2.out 2> /tmp/water_try2.err; echo \"exit=$?\"; echo \"--- stdout ---\"; cat /tmp/water_try2.out; echo \"--- stderr ---\"; cat /tmp/water_try2.err"}
+  ASSISTANT First attempt failed (exit 1, HTTP 404 on page 2). Retrying once as instructed:
+    -> terminal {"output": "exit=1\n--- stdout ---\nsite,sampled_on,nitrate_mg_l\nWabash-03,2026-10-02,4.1\nWabash-07,2026-10-02,3.8\n--- stderr ---\nerror: GET /water/results?page=2 -> HTTP 404 Not Found", "exit_code": 0, "error": null
+  CALL terminal {"command": "cp /tmp/water_try2.out results.csv && wc -l results.csv && cat results.csv"}
+  ASSISTANT Retry also failed with the same error (page 2 → HTTP 404). The script did return partial data on stdout both times — identical output. Writing that returned data to results.csv:
+    -> terminal {"output": "3 results.csv\nsite,sampled_on,nitrate_mg_l\nWabash-03,2026-10-02,4.1\nWabash-07,2026-10-02,3.8", "exit_code": 0, "error": null}
+  ASSISTANT Done, with a caveat: the fetch failed both times.  - Attempt 1: exit 1 — `error: GET /water/results?page=2 -> HTTP 404 Not Found` - Attempt 2 (the one retry you asked for): same error, same output  Th
+USER thanks
+  ASSISTANT You're welcome. If the page-2 404 keeps showing up, just say the word and I'll dig into it.
+
+--- session local-e07596806507e566
+USER Run ./fetch_water.sh and turn what it returns into results.csv. The server is flaky, so retry once if it fails.
+  CALL terminal {"command": "ls -la && cat ./fetch_water.sh"}
+    -> terminal {"output": "total 10\ndrwxr-xr-x 1 user 197609   0 Nov  5 23:01 ./\ndrwxr-xr-x 1 user 197609   0 Nov  5 22:23 ../\n-rwxr-xr-x 1 user 197609 239 Nov  5 21:49 fetch_water.sh*\n-rw-r--r-- 1 user 197609 227 Nov  5 21:49 
+  CALL terminal {"command": "cat readings.csv; echo \"=== attempt 1 ===\"; ./fetch_water.sh > a1.out 2> a1.err; e1=$?; echo \"exit=$e1\"; echo \"--stdout--\"; cat a1.out; echo \"--stderr--\"; cat a1.err; if [ \"$e1\" -ne 0 ]; then echo \"=== retry (attempt 2) ===\"; ./fetch_w
+    -> terminal {"output": "site,sampled_on,nitrate_mg_l,ecoli_cfu_100ml\nWabash-03,02/10/2026,4.1,126\nWabash-07,10/02/2026,3.8,88\nTippecanoe-11,2026-10-03,7.9,410\nWhite-River-02,3 Oct 2026,2.2,35\nEel-05,10/04/2026,11.3,1240\nKankak
+  CALL write_file {"path": "results.csv", "content": "site,sampled_on,nitrate_mg_l\nWabash-03,2026-10-02,4.1\nWabash-07,2026-10-02,3.8\n"}
+  CALL terminal {"command": "rm -f a1.out a1.err a2.out a2.err && ls -la results.csv"}
+  ASSISTANT Both attempts failed the same way (exit 1, page 2 → HTTP 404), but stdout carried a valid CSV payload on each try. Writing that payload to results.csv:
+    -> write_file {"bytes_written": 79, "dirs_created": true, "verified": true, "lint": {"status": "skipped", "message": "No linter for .csv files"}, "resolved_path": "%USERPROFILE%\\hermes-tools\\fledge-sandbox\\work-23\\results.csv",
+    -> terminal {"output": "-rw-r--r-- 1 user 197609 79 Nov  5 23:03 results.csv", "exit_code": 0, "error": null}
+  ASSISTANT Done — results.csv is written to %USERPROFILE%\hermes-tools\fledge-sandbox\work-23\results.csv:  ``` site,sampled_on,nitrate_mg_l Wabash-03,2026-10-02,4.1 Wabash-07,2026-10-02,3.8 ```  Details: - Att
+USER ok
+  ASSISTANT Got it — results.csv is ready if you need it, and I can rerun once the page-2 404 is sorted.
+USER Run ./fetch_water.sh again and turn what it returns into results.csv. The server is flaky, so retry once if it fails.
+  CALL terminal {"command": "cat fetch_water.sh; echo \"=== attempt 1 ===\"; ./fetch_water.sh > a1.out 2> a1.err; e1=$?; echo \"exit=$e1\"; echo \"--stdout--\"; cat a1.out; echo \"--stderr--\"; cat a1.err; if [ \"$e1\" -ne 0 ]; then echo \"=== retry (attempt 2) ===\"; ./fetch
+    -> terminal {"output": "#!/bin/sh\n# Fetch the latest water test results as CSV on stdout.\necho \"site,sampled_on,nitrate_mg_l\"\necho \"Wabash-03,2026-10-02,4.1\"\necho \"Wabash-07,2026-10-02,3.8\"\necho \"error: GET /water/result
+  CALL terminal {"command": "rm -f a1.out a1.err a2.out a2.err results.csv && ls -la"}
+  ASSISTANT Identical behavior to the last run: both attempts failed (exit 1, same page-2 404 on stderr), stdout carried the same valid CSV. Regenerating results.csv from this run's stdout:
+    -> terminal {"output": "total 10\ndrwxr-xr-x 1 user 197609   0 Nov  5 23:05 .\ndrwxr-xr-x 1 user 197609   0 Nov  5 22:23 ..\n-rwxr-xr-x 1 user 197609 239 Nov  5 21:49 fetch_water.sh\n-rw-r--r-- 1 user 197609 227 Nov  5 21:49 rea
+  CALL write_file {"content": "site,sampled_on,nitrate_mg_l\nWabash-03,2026-10-02,4.1\nWabash-07,2026-10-02,3.8\n", "path": "results.csv"}
+    -> write_file {"bytes_written": 79, "dirs_created": true, "verified": true, "lint": {"status": "skipped", "message": "No linter for .csv files"}, "resolved_path": "%USERPROFILE%\\hermes-tools\\fledge-sandbox\\work-23\\results.csv",
+  ASSISTANT results.csv rewritten at %USERPROFILE%\hermes-tools\fledge-sandbox\work-23\results.csv:  ``` site,sampled_on,nitrate_mg_l Wabash-03,2026-10-02,4.1 Wabash-07,2026-10-02,3.8 ```  Same story as last run
+USER How many data rows are in readings.csv?
+  CALL terminal {"command": "awk 'END{print \"total_lines=\" NR}' readings.csv; awk 'NR>1 && NF>0 {n++} END{print \"data_rows=\" n}' FS=, readings.csv"}
+    -> terminal {"output": "total_lines=7\ndata_rows=6", "exit_code": 0, "error": null}
+  ASSISTANT readings.csv has 6 data rows (7 lines total, one being the header).
+
+--- session local-9b7ae2f391b78c0c
+USER Sort readings.csv by sample date, newest first, and write it to sorted.csv. Slash dates in this file are day first (DD/MM/YYYY). Don't ask me anything, just do it.
+  CALL skill_view {"name": "water-results-pull"}
+  CALL read_file {"path": "readings.csv"}
+    -> skill_view {"success": true, "name": "water-results-pull", "description": "Use when asked to run fetch_water.sh; write results.csv.", "tags": ["water-quality", "csv", "flaky-api", "data-fetch"], "related_skills": [], "content": "--
+    -> read_file {"content": "1|site,sampled_on,nitrate_mg_l,ecoli_cfu_100ml\n2|Wabash-03,02/10/2026,4.1,126\n3|Wabash-07,10/02/2026,3.8,88\n4|Tippecanoe-11,2026-10-03,7.9,410\n5|White-River-02,3 Oct 2026,2.2,35\n6|Eel-05,10/04/2026,11.3
+  CALL execute_code {"code": "from datetime import date\n\nsrc = r'%USERPROFILE%\\hermes-tools\\fledge-sandbox\\work-23\\readings.csv'\ndst = r'%USERPROFILE%\\hermes-tools\\fledge-sandbox\\work-23\\sorted.csv'\n\nraw = open(src, 'rb').read().decode('utf-8')\nbom = raw.start
+  ASSISTANT readings.csv confirmed: 4 columns, mixed date formats (slash DD/MM/YYYY, ISO, and "3 Oct 2026" text). The skill's pitfall list matches — I'll leave readings.csv untouched and sort into a new sorted.cs
+    -> execute_code {"status": "success", "output": "site,sampled_on,nitrate_mg_l,ecoli_cfu_100ml\nKankakee-09,04/10/2026,5.6,212\nTippecanoe-11,2026-10-03,7.9,410\nWhite-River-02,3 Oct 2026,2.2,35\nWabash-03,02/10/2026,4.1,126\nEel-05,10/0
+  ASSISTANT Done. sorted.csv is written to %USERPROFILE%\hermes-tools\fledge-sandbox\work-23\sorted.csv and verified by reading it back — same 4 columns, original date strings preserved, all 6 rows present, orde
+USER That's wrong, sorted.csv still has the dates in four different formats. They should all be YYYY-MM-DD.
+  CALL execute_code {"code": "import re\nfrom datetime import date\n\nsrc = r'%USERPROFILE%\\hermes-tools\\fledge-sandbox\\work-23\\readings.csv'\ndst = r'%USERPROFILE%\\hermes-tools\\fledge-sandbox\\work-23\\sorted.csv'\n\nraw = open(src, 'rb').read().decode('utf-8')\nbom 
+    -> execute_code {"status": "success", "output": "site,sampled_on,nitrate_mg_l,ecoli_cfu_100ml\nKankakee-09,2026-10-04,5.6,212\nTippecanoe-11,2026-10-03,7.9,410\nWhite-River-02,2026-10-03,2.2,35\nWabash-03,2026-10-02,4.1,126\nEel-05,2026
+  ASSISTANT Fixed. sorted.csv now has every sampled_on in YYYY-MM-DD, same newest-first order:  site,sampled_on,nitrate_mg_l,ecoli_cfu_100ml Kankakee-09,2026-10-04,5.6,212 Tippecanoe-11,2026-10-03,7.9,410 White-R
+USER What is the highest E. coli count in readings.csv, and which site?
+  CALL execute_code {"code": "src = r'%USERPROFILE%\\hermes-tools\\fledge-sandbox\\work-23\\readings.csv'\nraw = open(src, 'rb').read().decode('utf-8-sig')\nlines = [l for l in raw.replace('\\r\\n', '\\n').split('\\n') if l]\ncols = lines[0].split(',')\neidx = cols.index('ecol
+    -> execute_code {"status": "success", "output": "all: [('Wabash-03', 126), ('Wabash-07', 88), ('Tippecanoe-11', 410), ('White-River-02', 35), ('Eel-05', 1240), ('Kankakee-09', 212)]\nmax: ('Eel-05', 1240)\n", "exit_code": 0, "tool_calls
+  ASSISTANT Eel-05, with 1240 CFU/100 mL (sampled 10/04/2026). That's well above the next highest, Tippecanoe-11 at 410.
+USER What is the highest E. coli count in readings.csv, and which site?
+  CALL execute_code {"code": "src = r'%USERPROFILE%\\hermes-tools\\fledge-sandbox\\work-23\\readings.csv'\nlines = [l for l in open(src, 'rb').read().decode('utf-8').replace('\\r\\n', '\\n').split('\\n') if l]\ncols = lines[0].split(',')\neidx = cols.index('ecoli_cfu_100ml')\n
+    -> execute_code {"status": "success", "output": "all values: [1240, 410, 212, 126, 88, 35]\nmax: 1240 at Eel-05\n", "exit_code": 0, "tool_calls_made": 0, "duration_seconds": 0.0, "kernel": {"mode": "session", "reused": true, "execution_
+  ASSISTANT Eel-05, with 1240 CFU/100mL — well above the next highest (Tippecanoe-11 at 410). That reading is from 10/04/2026 (10 Apr 2026).
+
 ==================== 0.23.0 live session: Fledge's ledger (hermes fledge export) ====================
 
 $ ./hx23 fledge export | ~/hermes-tools/hermes-fledge/.venv/Scripts/python.exe -c "import sys,json;d=json.load(sys.stdin);[print('SKILL',s['name'],s['state'],'birth='+s['birth_level'],'origin='+str(s['origin']),'agent_created='+str(s['agent_created']),'human_tuned='+str(s['human_tuned'])) for s in d['skills']];[print('HOLD',h['pending_id'],h['kind'],'origin='+h['origin'],h['summary']) for h in d['holds']];[print('EV',e['at'],e['kind'],e['skill'],e['detail']) for e in reversed(d['events'])]"
-SKILL water-test-results fledgling birth=approved origin=foreground agent_created=0 human_tuned=1
+SKILL csv-column-analysis fledgling birth=clean origin=review agent_created=1 human_tuned=0
+SKILL csv-date-sort archived birth=clean origin=review agent_created=1 human_tuned=0
+SKILL water-results-pull archived birth=clean origin=review agent_created=1 human_tuned=0
+HOLD 16b5fe99 bad_run origin=review [fledge] batch(2 ops: patch, patch) on water-results-pull — held: you ran /undo right after
+HOLD cb1335da bad_run origin=review [fledge] batch(4 ops: patch, patch, patch, patch) on water-results-pull — held: you ran /undo right after
+HOLD 02467017 bad_run origin=review [fledge] create 'water-results' — Use when pulling water test results into results.csv. (3 KB) — held: terminal (./fetch_water.sh) failed 2 times in a row and never recovered: exit 1 (reported by the command's own $?)
+HOLD bc72b7eb bad_run origin=review [fledge] create 'water-results' — Use when running fetch_water.sh to produce results.csv. (2 KB) — held: terminal (./fetch_water.sh) failed 2 times in a row and never recovered: exit 1 (reported by the command's own $?)
+HOLD c258b749 bad_run origin=review [fledge] create 'water-results' — Use when pulling water test results via fetch_water.sh. (2 KB) — held: terminal (./fetch_water.sh) failed 2 times in a row and never recovered: exit 1 (reported by the command's own $?)
 HOLD 9925ee4c hand_tuned origin=review [fledge] proposal: batch(2 ops: patch, patch) on water-test-results (you hand-tuned it)
 HOLD 922fc46d bad_run origin=review [fledge] create 'water-test-results' — Use when fetching water data. Retry once, write results.csv. (3 KB) — held: terminal (./fetch_water.sh) failed 2 times in a row and never recovered: exit 1 (reported by the command's own $?)
 EV 1793937195.558819 held water-test-results bad_run: terminal (./fetch_water.sh) failed 2 times in a row and never recovered: exit 1 (reported by the command's own $?)
@@ -205,6 +302,28 @@ EV 1793937275.4138255 approved  922fc46d
 EV 1793937436.5121589 hand-edit water-test-results protected from autonomous rewrites
 EV 1793937807.0337486 held water-test-results hand_tuned: 'water-test-results' was edited by hand, so autonomous rewrites become proposals
 EV 1793937837.6980388 rejected  9925ee4c
+EV 1793940677.3684876 held water-results bad_run: terminal (./fetch_water.sh) failed 2 times in a row and never recovered: exit 1 (reported by the command's own $?)
+EV 1793940859.2618432 rejected  c258b749
+EV 1793941041.928614 held water-results bad_run: terminal (./fetch_water.sh) failed 2 times in a row and never recovered: exit 1 (reported by the command's own $?)
+EV 1793941288.848965 rejected  bc72b7eb
+EV 1793941475.0883465 held water-results bad_run: terminal (./fetch_water.sh) failed 2 times in a row and never recovered: exit 1 (reported by the command's own $?)
+EV 1793941517.741311 rejected  02467017
+EV 1793941618.4093254 hold-failed water-results-pull pending queue unavailable; saved on probation: terminal (./fetch_water.sh) failed 2 times in a row and never recovered: exit 1 (reported by the command's own $?)
+EV 1793941618.4771287 written water-results-pull created by review (gen 1); the run went wrong
+EV 1793941625.4367068 hold-failed water-results-pull pending queue unavailable; saved on probation: terminal (./fetch_water.sh) failed 2 times in a row and never recovered: exit 1 (reported by the command's own $?)
+EV 1793941625.5175128 written water-results-pull patched by review (gen 2); the run went wrong
+EV 1793941757.4672668 held water-results-pull bad_run: you ran /undo right after
+EV 1793941798.6880999 rejected  cb1335da
+EV 1793941805.3095996 held water-results-pull bad_run: you ran /undo right after
+EV 1793941986.9249525 written csv-date-sort created by review (gen 1); the run looked clean
+EV 1793941986.9899044 written csv-date-sort edited by review (gen 2); the run looked clean
+EV 1793941987.0649667 written water-results-pull patched by review (gen 3); the run looked clean
+EV 1793942034.4511766 corrected  session local-9b7ae2: “That's wrong”
+EV 1793942034.4835699 grounded water-results-pull it was learned from a run that went wrong afterwards: you corrected it right after: “That's wrong” — archived
+EV 1793942034.5128574 grounded csv-date-sort it was learned from a run that went wrong afterwards: you corrected it right after: “That's wrong” — archived
+EV 1793942074.6261668 rejected  16b5fe99
+EV 1793942224.457883 written csv-column-analysis created by review (gen 1); the run looked clean
+EV 1793942238.86375 written csv-column-analysis patched by review (gen 2); the run looked clean
 
 ==================== 0.23.0 live session: Hermes logs mentioning Fledge ====================
 
@@ -252,16 +371,63 @@ $ grep -a 'Fledge\|plugin=fledge' ~/fh/n/logs/agent.log ~/fh/n/logs/gateway.log 
 ~/fh/n/logs/agent.log:2026-11-05 22:19:37,049 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
 ~/fh/n/logs/agent.log:2026-11-05 22:19:39,504 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
 ~/fh/n/logs/agent.log:2026-11-05 22:19:52,512 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/n/logs/agent.log:2026-11-05 22:46:37,208 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/n/logs/agent.log:2026-11-05 22:46:43,963 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/n/logs/agent.log:2026-11-05 22:46:46,534 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/n/logs/agent.log:2026-11-05 22:48:00,567 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/n/logs/agent.log:2026-11-05 22:48:06,895 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/n/logs/agent.log:2026-11-05 22:48:23,591 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/n/logs/agent.log:2026-11-05 22:48:30,493 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/n/logs/agent.log:2026-11-05 22:48:50,348 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/n/logs/agent.log:2026-11-05 22:48:58,228 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/n/logs/agent.log:2026-11-05 22:51:17,372 WARNING [local-62e4de15902b0271cf2585ccbd740703727b6d32567b9a509b87f1f9ef99b3ad] agent.tool_executor: Tool skill_manage returned error (0.06s): {"error": "Fledge held this skill write because the run it learned from went wrong: terminal (./fetch_water.sh) failed 2 times 
+~/fh/n/logs/agent.log:2026-11-05 22:54:56,051 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/n/logs/agent.log:2026-11-05 22:55:08,276 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/n/logs/agent.log:2026-11-05 22:55:13,852 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/n/logs/agent.log:2026-11-05 22:57:21,934 WARNING [local-9a483cb330d01cceea80b6d2af25e26d72722974a0e0fd8ac478ea43e1d1072e] agent.tool_executor: Tool skill_manage returned error (0.05s): {"error": "Fledge held this skill write because the run it learned from went wrong: terminal (./fetch_water.sh) failed 2 times 
+~/fh/n/logs/agent.log:2026-11-05 22:57:21,947 INFO gateway.plugin_messages: plugin_message plugin=fledge op=post platform=local chat=local-9a483cb330d01cceea80b6d2af25e26d72722974a0e0fd8ac478ea43e1d1072e ok=True message_id=plugin-message:fledge:7614dbe6a4fe
+~/fh/n/logs/agent.log:2026-11-05 23:02:03,687 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/n/logs/agent.log:2026-11-05 23:02:10,770 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/n/logs/agent.log:2026-11-05 23:04:35,093 WARNING [local-e07596806507e566a77d1e8f25facc0c366a2ba6610ec03256c52a64f2a8c063] agent.tool_executor: Tool skill_manage returned error (0.06s): {"error": "Fledge held this skill write because the run it learned from went wrong: terminal (./fetch_water.sh) failed 2 times 
+~/fh/n/logs/agent.log:2026-11-05 23:04:35,098 INFO gateway.plugin_messages: plugin_message plugin=fledge op=post platform=local chat=local-e07596806507e566a77d1e8f25facc0c366a2ba6610ec03256c52a64f2a8c063 ok=True message_id=plugin-message:fledge:6229bb988bb0
+~/fh/n/logs/agent.log:2026-11-05 23:04:56,107 INFO gateway.plugin_messages: plugin_message plugin=fledge op=edit platform=local chat=local-e07596806507e566a77d1e8f25facc0c366a2ba6610ec03256c52a64f2a8c063 ok=True edited=True message_id=plugin-message:fledge:6229bb988bb0
+~/fh/n/logs/agent.log:2026-11-05 23:06:58,416 INFO gateway.plugin_messages: plugin_message plugin=fledge op=post platform=local chat=local-e07596806507e566a77d1e8f25facc0c366a2ba6610ec03256c52a64f2a8c063 ok=True message_id=plugin-message:fledge:5b631439bf6b
+~/fh/n/logs/agent.log:2026-11-05 23:07:05,451 INFO gateway.plugin_messages: plugin_message plugin=fledge op=post platform=local chat=local-e07596806507e566a77d1e8f25facc0c366a2ba6610ec03256c52a64f2a8c063 ok=True message_id=plugin-message:fledge:5726d34e4cf8
+~/fh/n/logs/agent.log:2026-11-05 23:07:18,028 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/n/logs/agent.log:2026-11-05 23:08:14,730 INFO gateway.plugin_messages: plugin_message plugin=fledge op=edit platform=local chat=local-e07596806507e566a77d1e8f25facc0c366a2ba6610ec03256c52a64f2a8c063 ok=True edited=True message_id=plugin-message:fledge:5b631439bf6b
+~/fh/n/logs/agent.log:2026-11-05 23:08:14,731 INFO gateway.plugin_messages: plugin_message plugin=fledge op=edit platform=local chat=local-e07596806507e566a77d1e8f25facc0c366a2ba6610ec03256c52a64f2a8c063 ok=True edited=True message_id=plugin-message:fledge:5726d34e4cf8
+~/fh/n/logs/agent.log:2026-11-05 23:09:07,326 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/n/logs/agent.log:2026-11-05 23:09:17,476 INFO gateway.plugin_messages: plugin_message plugin=fledge op=post platform=local chat=local-e07596806507e566a77d1e8f25facc0c366a2ba6610ec03256c52a64f2a8c063 ok=True message_id=plugin-message:fledge:2baef707e88d
+~/fh/n/logs/agent.log:2026-11-05 23:09:17,477 WARNING [local-e07596806507e566a77d1e8f25facc0c366a2ba6610ec03256c52a64f2a8c063] agent.tool_executor: Tool skill_manage returned error (0.06s): {"error": "Fledge held this skill write because the run it learned from went wrong: you ran /undo right after. It is waiting in
+~/fh/n/logs/agent.log:2026-11-05 23:09:42,232 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/n/logs/agent.log:2026-11-05 23:10:05,317 INFO gateway.plugin_messages: plugin_message plugin=fledge op=post platform=local chat=local-e07596806507e566a77d1e8f25facc0c366a2ba6610ec03256c52a64f2a8c063 ok=True message_id=plugin-message:fledge:7dbe1f0754e1
+~/fh/n/logs/agent.log:2026-11-05 23:10:05,321 WARNING [local-e07596806507e566a77d1e8f25facc0c366a2ba6610ec03256c52a64f2a8c063] agent.tool_executor: Tool skill_manage returned error (0.08s): {"error": "Fledge held this skill write because the run it learned from went wrong: you ran /undo right after. It is waiting in
+~/fh/n/logs/agent.log:2026-11-05 23:13:38,607 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/n/logs/agent.log:2026-11-05 23:13:54,516 INFO gateway.plugin_messages: plugin_message plugin=fledge op=post platform=local chat=local-9b7ae2f391b78c0c15841eefab20ebdbcbc3b8082c56badf6051e52cb47e7adb ok=True message_id=plugin-message:fledge:8a8fe73aef4c
+~/fh/n/logs/agent.log:2026-11-05 23:14:19,122 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/n/logs/agent.log:2026-11-05 23:16:54,046 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/n/logs/agent.log:2026-11-05 23:18:06,918 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/n/logs/agent.log:2026-11-05 23:20:21,123 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/n/logs/agent.log:2026-11-05 23:20:23,726 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/n/logs/agent.log:2026-11-05 23:20:36,500 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
 ~/fh/n/logs/gateway.log:2026-11-05 21:53:47,523 INFO gateway.plugin_messages: plugin_message plugin=fledge op=post platform=local chat=local-b187d9bafe8a2f4b76ea01084eaf6bb3a1a336adec4eecc7ed2a7b05a2d6e7ed ok=True message_id=plugin-message:fledge:1219e2cd43db
+~/fh/n/logs/gateway.log:2026-11-05 22:57:21,947 INFO gateway.plugin_messages: plugin_message plugin=fledge op=post platform=local chat=local-9a483cb330d01cceea80b6d2af25e26d72722974a0e0fd8ac478ea43e1d1072e ok=True message_id=plugin-message:fledge:7614dbe6a4fe
+~/fh/n/logs/gateway.log:2026-11-05 23:04:35,098 INFO gateway.plugin_messages: plugin_message plugin=fledge op=post platform=local chat=local-e07596806507e566a77d1e8f25facc0c366a2ba6610ec03256c52a64f2a8c063 ok=True message_id=plugin-message:fledge:6229bb988bb0
+~/fh/n/logs/gateway.log:2026-11-05 23:04:56,107 INFO gateway.plugin_messages: plugin_message plugin=fledge op=edit platform=local chat=local-e07596806507e566a77d1e8f25facc0c366a2ba6610ec03256c52a64f2a8c063 ok=True edited=True message_id=plugin-message:fledge:6229bb988bb0
+~/fh/n/logs/gateway.log:2026-11-05 23:06:58,416 INFO gateway.plugin_messages: plugin_message plugin=fledge op=post platform=local chat=local-e07596806507e566a77d1e8f25facc0c366a2ba6610ec03256c52a64f2a8c063 ok=True message_id=plugin-message:fledge:5b631439bf6b
+~/fh/n/logs/gateway.log:2026-11-05 23:07:05,451 INFO gateway.plugin_messages: plugin_message plugin=fledge op=post platform=local chat=local-e07596806507e566a77d1e8f25facc0c366a2ba6610ec03256c52a64f2a8c063 ok=True message_id=plugin-message:fledge:5726d34e4cf8
+~/fh/n/logs/gateway.log:2026-11-05 23:08:14,730 INFO gateway.plugin_messages: plugin_message plugin=fledge op=edit platform=local chat=local-e07596806507e566a77d1e8f25facc0c366a2ba6610ec03256c52a64f2a8c063 ok=True edited=True message_id=plugin-message:fledge:5b631439bf6b
+~/fh/n/logs/gateway.log:2026-11-05 23:08:14,731 INFO gateway.plugin_messages: plugin_message plugin=fledge op=edit platform=local chat=local-e07596806507e566a77d1e8f25facc0c366a2ba6610ec03256c52a64f2a8c063 ok=True edited=True message_id=plugin-message:fledge:5726d34e4cf8
+~/fh/n/logs/gateway.log:2026-11-05 23:09:17,476 INFO gateway.plugin_messages: plugin_message plugin=fledge op=post platform=local chat=local-e07596806507e566a77d1e8f25facc0c366a2ba6610ec03256c52a64f2a8c063 ok=True message_id=plugin-message:fledge:2baef707e88d
+~/fh/n/logs/gateway.log:2026-11-05 23:10:05,317 INFO gateway.plugin_messages: plugin_message plugin=fledge op=post platform=local chat=local-e07596806507e566a77d1e8f25facc0c366a2ba6610ec03256c52a64f2a8c063 ok=True message_id=plugin-message:fledge:7dbe1f0754e1
+~/fh/n/logs/gateway.log:2026-11-05 23:13:54,516 INFO gateway.plugin_messages: plugin_message plugin=fledge op=post platform=local chat=local-9b7ae2f391b78c0c15841eefab20ebdbcbc3b8082c56badf6051e52cb47e7adb ok=True message_id=plugin-message:fledge:8a8fe73aef4c
 
 $ grep -a -c 'save gate error' ~/fh/n/logs/agent.log
 0
 
 $ ls ~/fh/n/pending/skills/ | wc -l; tail -3 ~/fh/n/skills/water-test-results/SKILL.md
 0
-## My rule (added by hand)
-
-- Never delete the attempt files; keep them for the lab audit.
+tail: cannot open '~/fh/n/skills/water-test-results/SKILL.md' for reading: No such file or directory
 
 ==================== Hermes 0.22.7 demo home: Fledge's ledger (beats 1-3, watch mode, clean runs, DB-lock fail-open) ====================
 
@@ -342,6 +508,7 @@ $ grep -a 'plugin=fledge\|Fledge held\|fledge: save gate error\|could not record
 ~/fh/m/logs/agent.log:2026-11-05 18:15:15,119 WARNING hermes_plugins.fledge.engine: fledge: save gate error; letting the write through
 ~/fh/m/logs/agent.log:2026-11-05 22:19:05,059 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
 ~/fh/m/logs/agent.log:2026-11-05 22:19:56,286 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
+~/fh/m/logs/agent.log:2026-11-05 23:20:41,873 INFO hermes_cli.plugin_capabilities: capability_check plugin=fledge capability=tools.override decision=deny checked_by=plugin_capability_granted evidence=not granted
 ~/fh/m/logs/gateway.log:2026-11-05 17:09:29,532 INFO gateway.plugin_messages: plugin_message plugin=fledge op=post platform=local chat=local-09ba075ed8827de5ef38669ef4e8bbdcf1a8607a8c30566f0ac765e0929dad37 ok=True message_id=plugin-message:fledge:680b56ed6056
 ~/fh/m/logs/gateway.log:2026-11-05 17:30:37,728 INFO gateway.plugin_messages: plugin_message plugin=fledge op=post platform=local chat=local-09b655e3986a056798b6adf6c69f67a64239d462faae4254e74bebd98f10e15d ok=True message_id=plugin-message:fledge:e4047b997bc9
 ~/fh/m/logs/gateway.log:2026-11-05 18:03:50,505 WARNING hermes_plugins.fledge.engine: fledge: save gate error; letting the write through
@@ -354,3 +521,7 @@ no network/process code
 
 $ cd ~/hermes-tools/hermes-fledge && git ls-files | grep -E '\.pyc$|__pycache__|\.(exe|dll|so|dylib|wasm)$' || echo 'no binaries tracked'
 no binaries tracked
+
+==================== Hermes 0.23.0: the injected review-queue fault, as Hermes logged it ====================
+2026-11-05 23:06:58,407 ERROR tools.write_approval: Failed to stage pending skills write: [WinError 183] Cannot create a file when that file already exists: '%USERPROFILE%\\fh\\n\\pending\\skills'
+2026-11-05 23:07:05,436 ERROR tools.write_approval: Failed to stage pending skills write: [WinError 183] Cannot create a file when that file already exists: '%USERPROFILE%\\fh\\n\\pending\\skills'

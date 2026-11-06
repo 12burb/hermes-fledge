@@ -135,13 +135,15 @@ open the PR with the body below. Then send the form.
 > commands, no background processes; never approves anything; the gate lets writes through on its own
 > errors (except a write already queued for review, which stays held). Needs `plugins.isolation: in_process` (the default) for full accuracy.
 >
-> **Tested:** 143 unit and flow tests on Python 3.14 and 3.11 (`python -m pytest tests`); `hermes plugins
+> **Tested:** 150 unit and flow tests on Python 3.14 and 3.11 (`python -m pytest tests`); `hermes plugins
 > doctor --ci` and `hermes plugins validate` pass on Hermes **0.23.0** and **0.22.7** (Windows 11 ARM64). Live
 > sessions with a real model (glm-5.3) in throwaway HERMES_HOMEs: on 0.23.0, installed with `hermes plugins
-> install 12burb/hermes-fledge`, a bad-run save was held (origin review), approved onto probation, a
-> foreground rewrite of a hand-edited skill raised Hermes' approval prompt, and an autonomous rewrite became a
-> proposal; on 0.22.7, all three demo beats, watch mode, 13 clean review writes with 0 holds, and fail-open
-> under a locked database. 19 bugs found and fixed along the way, each with a test. Results in
+> install 12burb/hermes-fledge`, all three demo beats (bad-run save held with origin review; a save grounded
+> and archived after a real correction; an autonomous rewrite of a hand-edited skill turned into a proposal),
+> approve onto probation, Hermes' approval prompt for a foreground rewrite of a hand-edited skill, `/undo`, a
+> review queue Hermes could not write to (the save landed on probation instead of being lost) and mistyped
+> settings; on 0.22.7, the three beats again, watch mode, 13 clean review writes with 0 holds, and fail-open
+> under a locked database. 21 bugs found and fixed along the way, each with a test. Results in
 > [VALIDATION.md](https://github.com/12burb/hermes-fledge/blob/SHA/VALIDATION.md), raw output in
 > [tests/smoke-2026-11-05.txt](https://github.com/12burb/hermes-fledge/blob/SHA/tests/smoke-2026-11-05.txt).
 > Demo: VIDEO_LINK.

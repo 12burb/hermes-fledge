@@ -14,7 +14,7 @@ both links in the form · no label or title tag required.
 |---|---|
 | OS | Windows 11, ARM64 (native) |
 | Hermes validated | **v0.23.0** (current release, tag commit `2bd378ed`, 2026-11-05) and **v0.22.7** (`b200f5bc60e3`, 2026-11-03, the `requires_hermes` floor) |
-| Python | tests: 3.14 and 3.11.16 (143 passed on both); Hermes runtime: CPython 3.14 ARM64 |
+| Python | tests: 3.14 and 3.11.16 (150 passed on both); Hermes runtime: CPython 3.14 ARM64 |
 | How | separate read-only checkouts of v0.23.0 and v0.22.7 plus throwaway `HERMES_HOME`s (`%USERPROFILE%\fh\n` 0.23.0, `%USERPROFILE%\fh\d` dev and `%USERPROFILE%\fh\m` demo on 0.22.7) outside any real install, each running its own gateway (`gateway.run: … starting this home's gateway beside it`). No real profile was touched. |
 | Model | `glm-5.3` via OpenCode Go (API key; no OAuth tokens copied) |
 | Isolation | `plugins.isolation: in_process` (the 0.22.7 default, `hermes_cli/plugin_isolation.py:3`) |
@@ -25,10 +25,10 @@ both links in the form · no label or title tag required.
 ```
 $ python -m pytest tests            # as received (5176ad4)
 93 passed
-$ python -m pytest tests            # 057bc97, Python 3.14
-143 passed in 0.75s
-$ python -m pytest tests            # 057bc97, Python 3.11.16
-143 passed in 1.27s
+$ python -m pytest tests            # Python 3.14
+150 passed in 0.69s
+$ python -m pytest tests            # Python 3.11.16
+150 passed in 0.64s
 ```
 
 Every fix below came with a test that fails without it (checked by stashing the fix and re-running).
@@ -108,7 +108,12 @@ In-session `/fledge doctor`: all six checks ok.
 | Approve path: `/fledge approve` → skill lands as a fledgling, `birth=approved`, counted as the user's (`agent_created=0`) | ✅ |
 | Foreground rewrite of a hand-edited skill → Hermes' approval prompt | ✅ the agent tried to patch it mid-turn; the prompt read "Fledge: Hermes wants to change 'water-test-results', which you edited by hand. Allow this change?"; left unanswered, it timed out as a deny and the skill was untouched |
 | Beat 3: autonomous `/refine` rewrite of the hand-edited skill → proposal | ✅ `9925ee4c` (origin review), rejected; the hand-written rule is still in SKILL.md |
-| Beat 2 (grounding by correction) | not re-run cleanly on 0.23.0. The take turned into a clarify dialog about ambiguous dates, and a keypress chose the dialog's default, so it was dropped rather than used. Passed on 0.22.7 (below); the hooks it uses are byte-identical |
+| Beat 2: a clean save, then a real correction → grounded at once | ✅ "Sort readings.csv by sample date…" (sorted right, dates left in four formats) → `/refine save this as a skill` → `csv-date-sort` fledgling, `birth=clean` → "That's wrong, sorted.csv still has the dates in four different formats…" → `grounded csv-date-sort … you corrected it right after: "That's wrong" — archived`. `water-results-pull`, which the same review had patched from that run, was grounded with it. Notice shown in the CLI during that turn |
+| Hold notice timing | ✅ after the fix below: posted from the review thread at once (`plugin_message … op=post` 23:04:35) and, for the classic CLI, re-published at the next turn (`op=edit` 23:04:56), where it appeared on screen. Desktop/TUI showing it at once is from source (`gateway/plugin_messages.py` `_publish_local` → keyed `notification.show`; `gateway/run_housekeeping_disk.py:75` sends such notices to Desktop/TUI between turns), not tested live: no Node in the sandbox |
+| Hermes' review queue unwritable (`pending/skills` replaced by a file) | ✅ Hermes logged `Failed to stage pending skills write: [WinError 183]`; Fledge confirmed nothing was queued and saved the skill on probation (`hold-failed … pending queue unavailable; saved on probation`, `birth=bad`) instead of losing it. Folder restored afterwards |
+| `/undo` right after a clean turn, then a save | ✅ held `cb1335da`: "you ran /undo right after" |
+| `/retry`, then a save | ✅ as designed: `/retry` counts against the answer it replaces; the save came from the new answer and was recorded `clean`. (`pre_command` reaches Fledge on 0.23.0: proven by the `/undo` row; both go through `gateway/session_commands.py` `fire`) |
+| Invalid settings (`mode: banana`, `graduate_after: -4`) | ✅ defaults used, warning logged; after the fix below `/fledge doctor` also prints `!! setting 'mode' ignored (… got 'banana'); using 'enforce'`. Settings restored |
 | Fledge errors in `errors.log` / `save gate error` in `agent.log` | none (the only matches are the folder name `fledge-sandbox` and the expected hold message) |
 
 ## 4b. Live on Hermes 0.22.7
@@ -239,6 +244,8 @@ Found live on Hermes 0.22.7:
 17. **After a missed agent write, the agent's own change looked like a hand edit.** Fixed using Hermes' `last_patched_at` stamp. `5530c73`
 18. **A held write Hermes' queue failed to store was silently lost.** `stage_write` logs a disk failure and still returns a record (`tools/write_approval.py:74`, both releases), so Fledge said "held, don't retry" with nothing to approve. Now confirmed with `get_pending`; if missing, the save lands on probation with a notice. A hand-edited skill is still never overwritten. `931db8d`
 19. **A bare "No." answering the agent's own question counted against the turn** (weak signal: with one failing tool it reached "bad"). `pre_llm_call`'s `conversation_history` now shows whether the agent's last reply asked a question. `1ac1461`
+20. **A mistyped setting was silent.** Fledge fell back to the default and logged it, but `/fledge doctor` showed the default with no hint. Doctor now lists every ignored setting. `ffacc75`
+21. **Hold notices waited for the user's next message, and could vanish in the CLI.** Hermes runs the background review in a plain thread with no session bound, so `post_message` from it is refused (`hermes_cli/plugin_messages.py` `post`). Fledge now remembers each session's context from its foreground hooks and posts the notice from it at once (only that session can be reached). The classic CLI reads session events only during a turn, so a local notice posted between turns is re-published once (same key, replaced in place) at the next turn. `4b73d61`, `2225915`
 
 Found in code review (each confirmed by running the code first, then fixed with a test):
 

@@ -35,7 +35,8 @@ does (it will "remember" the script fails and skip the retry).
 2. Prompt: `/refine save the procedure for pulling water results as a skill`
    This runs Hermes' background review now instead of waiting for its usual nudge. The review tries to save
    a skill from the run it just watched fail.
-3. Fledge holds it. The notice arrives at the top of your next message (send `ok`):
+3. Fledge holds it. In the Desktop app the notice appears as soon as the review finishes; in the classic
+   `hermes chat` CLI it appears at the top of your next turn (send `ok`):
    `🪶 Fledge: held skill 'pull-water-results': it was learned from a run that went wrong (terminal was still
    failing when the turn ended …). Review: /fledge diff …`
 4. `/fledge diff <id>` → show the would-be skill, then `/fledge reject <id>`.
@@ -76,7 +77,7 @@ Caption: *Self-improvement, without overwriting the person who improved it first
 > **Fledge** — skills have to earn their wings.
 > No model grades the model. 9 hooks · MIT · `hermes plugins install 12burb/hermes-fledge`
 
-B-roll worth having: `python -m pytest tests` (143 passed) and `hermes plugins validate .` (green).
+B-roll worth having: `python -m pytest tests` (150 passed) and `hermes plugins validate .` (green).
 
 ## Narration (one voice, about 175 words, ~75 seconds)
 

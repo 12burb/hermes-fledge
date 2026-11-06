@@ -37,7 +37,9 @@ An error the agent recovered from is normal work and costs nothing, and a single
 
 ## What you see
 
-When Fledge holds something, the notice lands in your own chat at the start of your next turn:
+When Fledge holds something, a notice lands in your own chat right away (Desktop, TUI, Telegram and other
+messaging chats). The classic `hermes chat` CLI only draws notices while a turn is running, so there it
+appears at the start of your next turn:
 
 ```
 🪶 Fledge: held skill 'pull-water-results': it was learned from a run that went wrong
@@ -137,7 +139,7 @@ Where no public plugin seam exists yet, Fledge calls the same functions Hermes' 
 ## Development
 
 ```bash
-python -m pytest tests          # 143 tests, no Hermes install needed (Hermes surfaces are faked)
+python -m pytest tests          # 150 tests, no Hermes install needed (Hermes surfaces are faked)
 hermes plugins doctor . --ci    # real discovery, register(), hooks — in a temp HERMES_HOME
 hermes plugins validate .       # catalog admission checks
 ```
