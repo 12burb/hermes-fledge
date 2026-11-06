@@ -135,6 +135,8 @@ class FakeCtx:
         self.posted: list[str] = []
         self.unload: list[Any] = []
         self.post_ok = True
+        self.local = False  # a local (CLI/TUI/Desktop) session: Hermes' result carries "delivered"
+        self.edits: list[str] = []
 
     def get_config(self, key: str, default: Any = None) -> Any:
         return self.config.get(key, default)
@@ -155,7 +157,10 @@ class FakeCtx:
         if not self.post_ok:
             return SimpleNamespace(ok=False, error="no_conversation")
         self.posted.append(text)
-        return SimpleNamespace(ok=True, error=None)
+        result = {"ok": True, "message_id": f"m{len(self.posted)}"}
+        if self.local:
+            result["delivered"] = True
+        return SimpleNamespace(ok=True, error=None, result=result, edit=self.edits.append)
 
     def on_unload(self, callback: Any) -> None:
         self.unload.append(callback)

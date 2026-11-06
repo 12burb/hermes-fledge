@@ -3,7 +3,14 @@
 fork in a plain thread with no session bound. So each foreground hook remembers its session's context,
 and a notice raised in the fork is posted at once from a copy of THAT session's context: it can only reach
 the conversation the hold belongs to. If that fails, it stays queued and the next foreground hook of the
-session (turn start or turn end) posts it. Never raises."""
+session (turn start or turn end) posts it.
+
+Local sessions (CLI, TUI, Desktop) get the notice as a keyed ``notification.show`` event
+(gateway/plugin_messages.py ``_publish_local``). The TUI and Desktop show it at once, but the classic
+``hermes chat`` CLI only reads session events while a turn is running, so one posted between turns never
+appears there. So a local notice posted from the review thread is re-published once (``handle.edit`` with
+the same text and key, which replaces it in place where it was already shown) at the session's next
+foreground hook. Never raises."""
 
 from __future__ import annotations
 
@@ -12,6 +19,7 @@ import logging
 import threading
 from collections import OrderedDict
 from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +35,7 @@ class Notifier:
         self._lock = threading.Lock()
         self._queue: OrderedDict[str, list[str]] = OrderedDict()
         self._contexts: OrderedDict[str, contextvars.Context] = OrderedDict()
+        self._echo: OrderedDict[str, list[tuple[Any, str]]] = OrderedDict()
 
     def remember_context(self, session_id: str) -> None:
         """Called from a foreground hook of *session_id*: keep its context (the session binding)."""
@@ -45,6 +54,7 @@ class Notifier:
     def forget_context(self, session_id: str) -> None:
         with self._lock:
             self._contexts.pop(session_id, None)
+            self._echo.pop(session_id, None)
 
     def queue(self, session_id: str, text: str) -> None:
         if not text or not self._enabled():
@@ -69,7 +79,7 @@ class Notifier:
             with self._lock:
                 remembered = self._contexts.get(session_id) if session_id else None
             ctx = remembered.copy() if remembered is not None else contextvars.copy_context()
-            thread = threading.Thread(target=ctx.run, args=(self.flush, session_id), name="fledge-notice",
+            thread = threading.Thread(target=ctx.run, args=(self._flush, session_id, True), name="fledge-notice",
                                       daemon=True)
             thread.start()
             return thread
@@ -82,7 +92,21 @@ class Notifier:
             return list(self._queue.get(session_id or "*", [])) + list(self._queue.get("*", []))
 
     def flush(self, session_id: str) -> int:
-        """Post queued notices for *session_id* (and session-less ones) into the bound conversation."""
+        """From a foreground hook: post queued notices for *session_id* (and session-less ones) into the
+        bound conversation, and re-publish local notices posted since the last turn."""
+        self._echo_local(session_id)
+        return self._flush(session_id, False)
+
+    def _echo_local(self, session_id: str) -> None:
+        with self._lock:
+            echoes = self._echo.pop(session_id, []) if session_id else []
+        for handle, text in echoes:
+            try:
+                handle.edit(text)
+            except Exception:
+                logger.debug("fledge: re-publishing a notice failed", exc_info=True)
+
+    def _flush(self, session_id: str, background: bool) -> int:
         with self._lock:
             items = self._queue.pop(session_id, []) if session_id else []
             items += self._queue.pop("*", [])
@@ -101,4 +125,11 @@ class Notifier:
         except Exception:
             logger.debug("fledge: posting a notice failed", exc_info=True)
             return 0
+        result = getattr(handle, "result", None)
+        if background and session_id and isinstance(result, dict) and "delivered" in result:
+            with self._lock:  # a local session: show it again where the CLI is listening (next turn)
+                self._echo.setdefault(session_id, []).append((handle, text))
+                self._echo.move_to_end(session_id)
+                while len(self._echo) > _MAX_SESSIONS:
+                    self._echo.popitem(last=False)
         return len(items)

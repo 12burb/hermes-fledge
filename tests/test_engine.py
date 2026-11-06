@@ -621,6 +621,36 @@ def test_a_hold_notice_is_posted_right_away_from_the_unbound_review_thread(engin
     assert sum("held skill 'pull-water-results'" in p for p in ctx.posted) == 1  # posted once, not again
 
 
+def test_a_local_notice_from_the_review_is_shown_again_at_the_next_turn(engine, bridge, ctx):
+    """Live finding (0.23.0): the classic CLI reads session events only during a turn, so a notice the
+    review thread posted between turns never appeared. Local posts are re-published (same key) once."""
+    import contextvars
+    ctx.local = True
+    bound = _hermes_like_binding(ctx)
+    foreground = contextvars.copy_context()
+    foreground.run(bound.set, "agent:main:local:dm:" + SID)
+    foreground.run(turn, engine, "t1", "pull the results", BAD_RUN)
+    _in_thread(review_save, engine, bridge)
+    _join_notice_threads()
+    assert len(ctx.posted) == 1 and not ctx.edits
+    foreground.run(turn, engine, "t2", "ok")
+    assert ctx.edits == [ctx.posted[0]]  # same text, same message: replaced in place, not duplicated
+    foreground.run(turn, engine, "t3", "ok")
+    assert len(ctx.edits) == 1 and len(ctx.posted) == 1
+
+
+def test_a_messaging_notice_is_not_reposted(engine, bridge, ctx):
+    import contextvars
+    bound = _hermes_like_binding(ctx)  # ctx.local False: a Telegram-style send, shown at once
+    foreground = contextvars.copy_context()
+    foreground.run(bound.set, "agent:main:telegram:dm:" + SID)
+    foreground.run(turn, engine, "t1", "pull the results", BAD_RUN)
+    _in_thread(review_save, engine, bridge)
+    _join_notice_threads()
+    foreground.run(turn, engine, "t2", "ok")
+    assert len(ctx.posted) == 1 and not ctx.edits
+
+
 def test_a_notice_that_cannot_be_posted_waits_for_the_next_turn(engine, bridge, ctx):
     import contextvars
     bound = _hermes_like_binding(ctx)
