@@ -31,4 +31,9 @@ Validated against Hermes v0.22.7 before release (see VALIDATION.md), which chang
 - Probation: a relapse or restore starts a fresh probation; the birth turn is not counted as a use; turns
   recorded before `mode off` never ground anything later.
 - Autonomous deletes of hand-edited skills become proposals too.
+- Fails open more carefully: a write already staged in Hermes' review queue stays held even if Fledge's own
+  database then fails (it was being saved *and* queued); an agent write Fledge missed recording is recognized
+  from Hermes' `last_patched_at` stamp instead of being mistaken for a hand edit.
+- A skill deleted before its use is judged is not re-created in the ledger; `/fledge reject` logs `rejected`;
+  `/fledge diff|approve|reject` accept any id in Hermes' queue.
 - `/fledge doctor` reports archive and content lock separately (the lock needs Hermes 0.22.7).
