@@ -10,7 +10,7 @@ was a real one (an actual exit 1, an actual user message).
 |---|---|
 | OS | Windows 11, ARM64 (native) |
 | Hermes validated | **v0.22.7** (tag, commit `b200f5bc60e3`, released 2026-11-03), Python 3.14.9 ARM64 |
-| How | a separate read-only checkout of v0.22.7 plus throwaway `HERMES_HOME`s (`C:\Users\onetw\fh\d` dev, `…\fh\m` demo) outside any real install, each running its own gateway (`gateway.run: … starting this home's gateway beside it`). No real profile was touched. |
+| How | a separate read-only checkout of v0.22.7 plus throwaway `HERMES_HOME`s (`%USERPROFILE%\fh\d` dev, `%USERPROFILE%\fh\m` demo) outside any real install, each running its own gateway (`gateway.run: … starting this home's gateway beside it`). No real profile was touched. |
 | Model | `glm-5.3` via OpenCode Go (API key; no OAuth tokens copied) |
 | Isolation | `plugins.isolation: in_process` (the 0.22.7 default, `hermes_cli/plugin_isolation.py:3`) |
 | Fledge | `5530c73` (all fixes below) |
