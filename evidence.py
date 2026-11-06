@@ -448,7 +448,8 @@ class EvidenceTracker:
 
     # -- turn lifecycle -----------------------------------------------------------------------------
 
-    def begin_turn(self, session_id: str, turn_id: str, user_message, task_id: str = "") -> Turn | None:
+    def begin_turn(self, session_id: str, turn_id: str, user_message, task_id: str = "", *,
+                   after_question: bool = False) -> Turn | None:
         """Open a new turn; the previous one gets its follow-up (and any correction). Returns it."""
         if not session_id:
             return None
@@ -460,7 +461,7 @@ class EvidenceTracker:
             previous = sess.current
             if previous is not None:
                 previous.followup_seen = True
-                previous.correction = detect_correction(user_message)
+                previous.correction = detect_correction(user_message, after_question=after_question)
                 if previous.ended_at is None:
                     previous.ended_at = self._clock()
                 if previous not in sess.turns:

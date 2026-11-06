@@ -559,3 +559,14 @@ def test_a_hand_edit_is_never_overwritten_even_when_the_queue_fails(engine, brid
     turn(engine, "t2", "porch lights", [("terminal", "ok", "")])
     patch = {"operations": [{"action": "patch", "name": "lights", "old_string": "a", "new_string": "b"}]}
     assert review_save(engine, bridge, args=patch)["action"] == "block"
+
+
+def test_no_to_the_agents_question_does_not_count_against_a_bad_turn(engine, bridge):
+    """A failing grep (2) plus a bare "No." (1) would reach 3 = bad; but the No. answered a question."""
+    turn(engine, "t1", "find the readings", [("terminal", "error", "exit 1")])
+    history = [{"role": "user", "content": "find the readings"},
+               {"role": "assistant", "content": "Nothing matched. Should I search the archive too?"},
+               {"role": "user", "content": "No."}]
+    engine.hook_pre_llm_call(session_id=SID, turn_id="t2", user_message="No.", conversation_history=history,
+                             task_id=SID)
+    assert not any(e["kind"] == "corrected" for e in engine.ledger.recent_events(20))

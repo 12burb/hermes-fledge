@@ -14,6 +14,7 @@ from collections.abc import Callable
 from typing import Any
 
 from . import report
+from .corrections import agent_asked_a_question
 from .bridge import ORIGIN_FOREGROUND, ORIGIN_OTHER, ORIGIN_REVIEW, ORIGIN_UNKNOWN, HermesBridge
 from .evidence import EvidenceTracker, Turn, Verdict, captured_exit_statuses, command_key, score_turn
 from .gate import (
@@ -105,11 +106,12 @@ class Fledge:
 
     @_safe
     def hook_pre_llm_call(self, session_id: str = "", task_id: str = "", turn_id: str = "", user_message: Any = "",
-                        **_: Any) -> None:
+                        conversation_history: Any = None, **_: Any) -> None:
         if not self.s.active or not self._foreground():
             return None
         sid = session_id or self.tracker.resolve_session(task_id=task_id)
-        previous = self.tracker.begin_turn(sid, turn_id, user_message, task_id)
+        previous = self.tracker.begin_turn(sid, turn_id, user_message, task_id,
+                                           after_question=agent_asked_a_question(conversation_history))
         if previous is not None and previous.correction is not None:
             self.ledger.add_event("corrected", "", f"session {sid[:12]}: “{previous.correction.phrase}”")
         self._settle()

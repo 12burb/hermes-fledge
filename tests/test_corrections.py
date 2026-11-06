@@ -63,3 +63,19 @@ def test_polite_closers_are_not_corrections(message):
 def test_no_followed_by_a_complaint_still_counts(message):
     found = detect_correction(message)
     assert found is not None and found.strength == "strong", message
+
+
+def test_a_bare_no_answering_the_agents_question_is_not_a_correction():
+    from fledge.corrections import agent_asked_a_question, detect_correction
+    history = [{"role": "user", "content": "sort it"},
+               {"role": "assistant", "content": "Done. Want me to chart it too?"},
+               {"role": "user", "content": "No."}]
+    assert agent_asked_a_question(history) is True
+    assert detect_correction("No.", after_question=True) is None
+    assert detect_correction("No.").strength == "weak"  # no question asked: still a weak signal
+    # A real complaint is still a correction after a question.
+    assert detect_correction("No, that's wrong, the dates are mixed up", after_question=True).strength == "strong"
+    assert agent_asked_a_question([{"role": "assistant", "content": "Here is the table."}]) is False
+    assert agent_asked_a_question([{"role": "assistant", "content": [{"type": "text", "text": "Retry? "}]},
+                                   {"role": "tool", "content": "x"}]) is True
+    assert agent_asked_a_question(None) is False

@@ -83,7 +83,21 @@ def message_text(message: Any) -> str:
     return ""
 
 
-def detect_correction(message: Any) -> Correction | None:
+def agent_asked_a_question(history: Any) -> bool:
+    """True when the agent's last reply in *history* (pre_llm_call's conversation_history) ended with a
+    question, so a bare "No." that follows answers it rather than judging the work."""
+    if not isinstance(history, list):
+        return False
+    for message in reversed(history):
+        if not isinstance(message, dict) or message.get("role") != "assistant":
+            continue
+        text = message_text(message.get("content")).strip()
+        if text:
+            return text.rstrip(" *_`)\"'").endswith("?")
+    return False
+
+
+def detect_correction(message: Any, *, after_question: bool = False) -> Correction | None:
     """Return the correction found at the start of *message*, or None."""
     # Phones, Telegram/iOS smart punctuation and macOS turn ' into ’; the patterns use ASCII.
     text = message_text(message).translate(_APOSTROPHES).strip()
@@ -91,7 +105,8 @@ def detect_correction(message: Any) -> Correction | None:
         return None
     window = text[:_WINDOW]
     if _BARE_NO_RE.match(window):
-        return Correction("weak", window.strip(" ,.!"))
+        # "Want me to chart it?" -> "No." is an answer, not a verdict.
+        return None if after_question else Correction("weak", window.strip(" ,.!"))
     positive = any(rx.search(window) for rx in _POSITIVE_RE)
     for rx in _STRONG_RE:
         match = rx.search(window)

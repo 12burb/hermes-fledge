@@ -27,7 +27,8 @@ Validated against Hermes v0.22.7 before release (see VALIDATION.md), which chang
 - Denied approvals use the `session_id` Hermes sends; declining Fledge's own prompt is not a denial.
 - Held batches keep the legacy default `name` so `/skills approve` can replay them.
 - Corrections: curly apostrophes are recognized; "No, thanks." and other polite closers are not
-  corrections; a bare "No." is a weak signal.
+  corrections; a bare "No." is a weak signal, and no signal at all when it answers a question the agent
+  just asked (read from `pre_llm_call`'s `conversation_history`).
 - Probation: a relapse or restore starts a fresh probation; the birth turn is not counted as a use; turns
   recorded before `mode off` never ground anything later.
 - Autonomous deletes of hand-edited skills become proposals too.
