@@ -572,28 +572,76 @@ def test_no_to_the_agents_question_does_not_count_against_a_bad_turn(engine, bri
     assert not any(e["kind"] == "corrected" for e in engine.ledger.recent_events(20))
 
 
-def test_a_hold_notice_is_posted_right_away_when_the_session_is_reachable(engine, bridge, ctx):
-    """Live finding: the hold notice only appeared after the user typed again. The review fork inherits the
-    turn's session binding, so Fledge now tries to post at once (off the hook's thread)."""
-    turn(engine, "t1", "pull the results", BAD_RUN)
-    review_save(engine, bridge)
-    for thread in [t for t in __import__("threading").enumerate() if t.name == "fledge-notice"]:
+def _hermes_like_binding(ctx):
+    """Model Hermes: post_message only reaches a conversation when a session is bound in the CALLING
+    context (hermes_cli/plugin_messages.py post -> gateway.session_context.bound_session_key), and the
+    background-review fork runs in a plain thread with nothing bound."""
+    import contextvars
+    bound = contextvars.ContextVar("session_key", default="")
+    real_post = ctx.post_message
+
+    def post_message(text):
+        if not bound.get():
+            from types import SimpleNamespace
+            return SimpleNamespace(ok=False, error="no_conversation")
+        return real_post(text)
+
+    ctx.post_message = post_message
+    return bound
+
+
+def _in_thread(fn, *args):
+    """Run *fn* the way Hermes runs the review fork: a new thread, empty context."""
+    import threading
+    out = {}
+    thread = threading.Thread(target=lambda: out.setdefault("r", fn(*args)))
+    thread.start()
+    thread.join(5)
+    return out.get("r")
+
+
+def _join_notice_threads():
+    import threading
+    for thread in [t for t in threading.enumerate() if t.name == "fledge-notice"]:
         thread.join(5)
+
+
+def test_a_hold_notice_is_posted_right_away_from_the_unbound_review_thread(engine, bridge, ctx):
+    """Live finding (0.23.0): the hold notice only appeared after the user typed again, because the
+    review fork has no session bound. Fledge now posts from the session's own remembered context."""
+    import contextvars
+    bound = _hermes_like_binding(ctx)
+    foreground = contextvars.copy_context()
+    foreground.run(bound.set, "agent:main:local:dm:" + SID)
+    foreground.run(turn, engine, "t1", "pull the results", BAD_RUN)
+    _in_thread(review_save, engine, bridge)  # unbound, like Hermes' review thread
+    _join_notice_threads()
     assert any("held skill 'pull-water-results'" in p for p in ctx.posted)
-    turn(engine, "t2", "ok")
+    foreground.run(turn, engine, "t2", "ok")
     assert sum("held skill 'pull-water-results'" in p for p in ctx.posted) == 1  # posted once, not again
 
 
-def test_an_unreachable_session_keeps_the_notice_for_the_next_turn(engine, bridge, ctx):
-    ctx.post_ok = False
-    turn(engine, "t1", "pull the results", BAD_RUN)
-    review_save(engine, bridge)
-    for thread in [t for t in __import__("threading").enumerate() if t.name == "fledge-notice"]:
-        thread.join(5)
+def test_a_notice_that_cannot_be_posted_waits_for_the_next_turn(engine, bridge, ctx):
+    import contextvars
+    bound = _hermes_like_binding(ctx)
+    turn(engine, "t1", "pull the results", BAD_RUN)  # this session's hooks ran unbound: nothing to borrow
+    _in_thread(review_save, engine, bridge)
+    _join_notice_threads()
     assert not ctx.posted
-    ctx.post_ok = True
-    turn(engine, "t2", "ok")
+    foreground = contextvars.copy_context()
+    foreground.run(bound.set, "agent:main:local:dm:" + SID)
+    foreground.run(turn, engine, "t2", "ok")
     assert any("held skill 'pull-water-results'" in p for p in ctx.posted)
+
+
+def test_a_closed_session_context_is_not_reused(engine, bridge, ctx):
+    import contextvars
+    bound = _hermes_like_binding(ctx)
+    foreground = contextvars.copy_context()
+    foreground.run(bound.set, "agent:main:local:dm:" + SID)
+    foreground.run(turn, engine, "t1", "pull the results", BAD_RUN)
+    engine.hook_on_session_finalize(session_id=SID)
+    assert SID not in engine.notifier._contexts
 
 
 def test_skill_report_says_an_approved_save_in_words(engine, bridge):

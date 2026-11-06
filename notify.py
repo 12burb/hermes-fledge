@@ -1,6 +1,9 @@
-"""Chat notices. ``ctx.post_message`` only reaches the conversation bound to the calling hook, and the
-background-review fork may not be bound to one, so notices are queued per session and flushed from the
-next foreground hook of that session (turn start or turn end). Never raises."""
+"""Chat notices. ``ctx.post_message`` only reaches the conversation bound to the calling context
+(hermes_cli/plugin_messages.py ``post``: ``bound_session_key()``), and Hermes runs the background-review
+fork in a plain thread with no session bound. So each foreground hook remembers its session's context,
+and a notice raised in the fork is posted at once from a copy of THAT session's context: it can only reach
+the conversation the hold belongs to. If that fails, it stays queued and the next foreground hook of the
+session (turn start or turn end) posts it. Never raises."""
 
 from __future__ import annotations
 
@@ -23,6 +26,25 @@ class Notifier:
         self._enabled = enabled
         self._lock = threading.Lock()
         self._queue: OrderedDict[str, list[str]] = OrderedDict()
+        self._contexts: OrderedDict[str, contextvars.Context] = OrderedDict()
+
+    def remember_context(self, session_id: str) -> None:
+        """Called from a foreground hook of *session_id*: keep its context (the session binding)."""
+        if not session_id:
+            return
+        try:
+            context = contextvars.copy_context()
+        except Exception:
+            return
+        with self._lock:
+            self._contexts[session_id] = context
+            self._contexts.move_to_end(session_id)
+            while len(self._contexts) > _MAX_SESSIONS:
+                self._contexts.popitem(last=False)
+
+    def forget_context(self, session_id: str) -> None:
+        with self._lock:
+            self._contexts.pop(session_id, None)
 
     def queue(self, session_id: str, text: str) -> None:
         if not text or not self._enabled():
@@ -38,13 +60,15 @@ class Notifier:
                 self._queue.popitem(last=False)
 
     def flush_soon(self, session_id: str) -> threading.Thread | None:
-        """Try to post now, from a short-lived thread running in a copy of the caller's context (the
-        background-review fork inherits its turn's session binding). The hook never waits on the post;
-        anything that can't be posted stays queued for the next foreground hook, as before."""
+        """Try to post now, from a short-lived thread running in a copy of the session's remembered
+        context (or the caller's, if none was remembered). The hook never waits on the post; anything
+        that can't be posted stays queued for the next foreground hook, as before."""
         if not self.pending(session_id):
             return None
         try:
-            ctx = contextvars.copy_context()
+            with self._lock:
+                remembered = self._contexts.get(session_id) if session_id else None
+            ctx = remembered.copy() if remembered is not None else contextvars.copy_context()
             thread = threading.Thread(target=ctx.run, args=(self.flush, session_id), name="fledge-notice",
                                       daemon=True)
             thread.start()

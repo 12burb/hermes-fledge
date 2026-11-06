@@ -115,6 +115,7 @@ class Fledge:
         if previous is not None and previous.correction is not None:
             self.ledger.add_event("corrected", "", f"session {sid[:12]}: “{previous.correction.phrase}”")
         self._settle()
+        self.notifier.remember_context(sid)
         self.notifier.flush(sid)
         return None
 
@@ -155,12 +156,14 @@ class Fledge:
         self.tracker.end_turn(sid, turn_id, completed=completed, failed=failed, interrupted=interrupted,
                               exit_reason=str(turn_exit_reason or ""))
         self._settle()
+        self.notifier.remember_context(sid)
         self.notifier.flush(sid)
 
     @_safe
     def hook_on_session_finalize(self, session_id: str = "", **_: Any) -> None:
         if session_id:
             self.tracker.close_session(session_id)
+            self.notifier.forget_context(session_id)
         self._settle()
 
     @_safe
@@ -168,6 +171,7 @@ class Fledge:
         closed = old_session_id or session_id
         if closed:
             self.tracker.close_session(closed)
+            self.notifier.forget_context(closed)
         self._settle()
 
     @_safe
