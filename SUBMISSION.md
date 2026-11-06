@@ -1,11 +1,11 @@
 # Shipping Fledge to the Hermes Agent Plugin Hackathon
 
 Checked against the official sources on 2026-11-05:
-[the announcement](https://nousresearch.com/) (Nous Research, Nov 5),
+[the announcement](https://x.com/NousResearch/status/2118094256438936062) (Nous Research, Nov 4),
 [Submitting to the Plugin Catalog](https://hermes-agent.nousresearch.com/docs/developer-guide/plugins/catalog-submission)
 and `plugin-catalog/README.md` on `NousResearch/hermes-agent` `main` (entry schema identical to v0.22.7).
 
-- **Deadline: 5 PM EST, Tuesday Nov 11, 2026** (= 4 PM CST, 22:00 UTC).
+- **Deadline: 5 PM EST, Wednesday Nov 11, 2026** (= 4 PM CST, 22:00 UTC).
 - **Entry = three things:** (1) a PR adding `plugin-catalog/fledge.yaml`, (2) a demo video posted on X
   tagging @NousResearch, **under 90 seconds**, showing the plugin working, (3) both links in the form
   <https://form.typeform.com/to/FwJLvOln>. The form can be sent as soon as the PR is open.
