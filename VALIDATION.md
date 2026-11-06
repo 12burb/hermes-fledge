@@ -83,6 +83,8 @@ from both v0.22.7 and current `main`: `OK: 1 file(s) valid`.
 
 Install: `hermes plugins install <local path>` is **not** accepted by 0.22.7 (owner/repo or Git URL only). Used
 a git clone into `<home>/plugins/fledge`, then `hermes plugins adopt fledge` and `hermes plugins enable fledge`.
+After publishing, the real path was checked too: `hermes plugins install 12burb/hermes-fledge --enable` →
+`Cloning https://github.com/12burb/hermes-fledge.git… ✓ Installed … ✓ Plugin fledge enabled.`
 `hermes fledge doctor`: write origin, pending queue, archive, content lock, skill lookup and plugin storage
 were **all ok**. All beats ran in an interactive `hermes chat` session. One-shot `chat -q … --resume` can't
 drive `/refine`, because the client detaches and session cleanup cancels the review.
