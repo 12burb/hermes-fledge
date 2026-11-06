@@ -118,9 +118,9 @@ open the PR with the body below. Then send the form.
 > message text, no skill bodies), held writes into `pending/skills/`, and archive moves of grounded
 > agent-created skills into `skills/.archive/`; no network, no model calls, no credentials, no shell
 > commands, no background processes; never approves anything; the gate lets writes through on its own
-> errors. Needs `plugins.isolation: in_process` (the default) for full accuracy.
+> errors (except a write already queued for review, which stays held). Needs `plugins.isolation: in_process` (the default) for full accuracy.
 >
-> **Tested:** TESTS unit and flow tests (`python -m pytest tests`); `hermes plugins doctor --ci` and
+> **Tested:** 138 unit and flow tests (`python -m pytest tests`); `hermes plugins doctor --ci` and
 > `hermes plugins validate --install-deps` on Hermes v0.22.7 (`b200f5b`, Windows 11 ARM64); live sessions
 > in an isolated HERMES_HOME, results in
 > [VALIDATION.md](https://github.com/OWNER/hermes-fledge/blob/SHA/VALIDATION.md). Demo: VIDEO_LINK.

@@ -113,7 +113,7 @@ Want to see what it would do before it does anything? `/fledge mode watch` recor
 Nine hooks, no tools, no patches to Hermes code:
 
 - `pre_llm_call`, `post_tool_call`, `on_session_end`, `on_session_finalize`, `on_session_reset`, `pre_command`, `post_approval_response` — record what happened in each foreground turn (tool statuses, turn outcome, your follow-up, `/undo`, denials). Turns of the background-review and side-question forks are ignored.
-- `pre_tool_call` on `skill_manage` — the save gate. It returns Hermes' documented `block` (held) or `approve` (ask you) directive. On its own errors it **fails open**: a Fledge exception never stops Hermes from saving skills. (Hermes itself blocks the tool call if any `pre_tool_call` callback hangs past `plugins.hook_callback_timeout`, 30 s by default; Fledge's gate does a few local SQLite reads and returns in milliseconds.)
+- `pre_tool_call` on `skill_manage` — the save gate. It returns Hermes' documented `block` (held) or `approve` (ask you) directive. On its own errors it **fails open**: a Fledge exception never stops Hermes from saving skills. The one exception is deliberate: once a held write is already in Hermes' review queue, it stays held even if Fledge then fails to record it, so the same write is never both saved and queued. (Hermes itself blocks the tool call if any `pre_tool_call` callback hangs past `plugins.hook_callback_timeout`, 30 s by default; Fledge's gate does a few local SQLite reads and returns in milliseconds.)
 - `on_skill_lifecycle` — writes that landed (start probation), skill loads (count real runs), archive/restore.
 
 Where no public plugin seam exists yet, Fledge calls the same functions Hermes' own commands use, all in [`bridge.py`](bridge.py) and each guarded so a moved function disables one feature instead of breaking the agent: the skill write origin (`tools.skill_provenance`), the pending queue (`tools.write_approval.stage_write`, the backend of `/skills pending`), and curator actions (`tools.skill_usage.archive_skill` / `set_locked`, the backend of `hermes curator archive` / `lock`). `hermes plugins validate` lists these imports as warnings; a public `ctx` seam for them is the obvious follow-up.
@@ -137,7 +137,7 @@ Where no public plugin seam exists yet, Fledge calls the same functions Hermes' 
 ## Development
 
 ```bash
-python -m pytest tests          # 131 tests, no Hermes install needed (Hermes surfaces are faked)
+python -m pytest tests          # 138 tests, no Hermes install needed (Hermes surfaces are faked)
 hermes plugins doctor . --ci    # real discovery, register(), hooks — in a temp HERMES_HOME
 hermes plugins validate .       # catalog admission checks
 ```
