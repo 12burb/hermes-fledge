@@ -17,18 +17,18 @@ and `plugin-catalog/README.md` on `NousResearch/hermes-agent` `main` (entry sche
 
 ```bash
 cd hermes-fledge
-gh repo create OWNER/hermes-fledge --public --source . --push \
+gh repo create 12burb/hermes-fledge --public --source . --push \
   --description "Skills have to earn their wings: evidence-gated skill saves for Hermes Agent"
 ```
 
 Before pushing: every commit is authored with the GitHub no-reply address
-(`git log --format='%an <%ae>' | sort -u`), `OWNER` is filled in `catalog/fledge.yaml` and `plugin.yaml`
+(`git log --format='%an <%ae>' | sort -u`), `12burb` is filled in `catalog/fledge.yaml` and `plugin.yaml`
 (`homepage:`), and the working tree is clean.
 
 From that moment the plugin is installable by anyone on Hermes >= 0.22.7, catalog or not:
 
 ```bash
-hermes plugins install OWNER/hermes-fledge --enable
+hermes plugins install 12burb/hermes-fledge --enable
 ```
 
 ## 2. Validate against real Hermes (done: see VALIDATION.md)
@@ -123,7 +123,7 @@ open the PR with the body below. Then send the form.
 > **Tested:** 138 unit and flow tests (`python -m pytest tests`); `hermes plugins doctor --ci` and
 > `hermes plugins validate --install-deps` on Hermes v0.22.7 (`b200f5b`, Windows 11 ARM64); live sessions
 > in an isolated HERMES_HOME, results in
-> [VALIDATION.md](https://github.com/OWNER/hermes-fledge/blob/SHA/VALIDATION.md). Demo: VIDEO_LINK.
+> [VALIDATION.md](https://github.com/12burb/hermes-fledge/blob/SHA/VALIDATION.md). Demo: VIDEO_LINK.
 
 ## 5. Optional: the issue that makes the imports go away
 
@@ -142,4 +142,4 @@ Title: `Plugin seam request: ctx.skills (write origin, stage for review, archive
 > Hermes learns from its own work, but it grades its own homework. Fledge makes skills earn their wings:
 > a skill learned from a run that went wrong waits for your review, new skills stay on probation, and
 > your hand-tuned skills stop getting overwritten. No model grades the model.
-> `hermes plugins install OWNER/hermes-fledge` · built for the @NousResearch plugin hackathon [video]
+> `hermes plugins install 12burb/hermes-fledge` · built for the @NousResearch plugin hackathon [video]

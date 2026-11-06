@@ -12,6 +12,7 @@ description: >-
   grades the model.
 author: Borb (12birb)
 license: MIT
+homepage: https://github.com/12burb/hermes-fledge
 requires_hermes: ">=0.22.7"
 tags: [skills, self-improvement, curator, reliability, safety]
 provides_tools: []

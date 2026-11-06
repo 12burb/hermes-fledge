@@ -9,7 +9,7 @@ fake a correction or a failure.
 ```bash
 hermes --version                                   # Fledge needs Hermes 0.22.7 or newer
 hermes profile create fledge-demo --clone          # keeps your keys, separate skills and memory
-hermes -p fledge-demo plugins install <owner>/hermes-fledge --enable
+hermes -p fledge-demo plugins install 12burb/hermes-fledge --enable
 mkdir -p ~/fledge-demo && cp demo/fetch_water.sh demo/readings.csv ~/fledge-demo/
 chmod +x ~/fledge-demo/fetch_water.sh
 hermes -p fledge-demo chat --in ~/fledge-demo      # start the session inside ~/fledge-demo
@@ -74,7 +74,7 @@ Caption: *Self-improvement, without overwriting the person who improved it first
 `/fledge` overview on screen, then the end card:
 
 > **Fledge** — skills have to earn their wings.
-> No model grades the model. 9 hooks · MIT · `hermes plugins install <owner>/hermes-fledge`
+> No model grades the model. 9 hooks · MIT · `hermes plugins install 12burb/hermes-fledge`
 
 B-roll worth having: `python -m pytest tests` (138 passed) and `hermes plugins validate .` (green).
 

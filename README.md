@@ -65,7 +65,7 @@ Holds live in Hermes' own pending queue, so `/skills pending` in the CLI lists t
 Requires Hermes **0.22.7 or newer**.
 
 ```bash
-hermes plugins install <owner>/hermes-fledge --enable
+hermes plugins install 12burb/hermes-fledge --enable
 hermes fledge scan      # optional: fingerprint existing skills so later hand edits are recognized
 ```
 

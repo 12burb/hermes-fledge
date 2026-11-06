@@ -1,6 +1,6 @@
 name: fledge
 title: Fledge
-repo: https://github.com/OWNER/hermes-fledge
+repo: https://github.com/12burb/hermes-fledge
 sha: "0000000000000000000000000000000000000000"  # quoted: an all-digit sha would parse as a number
 version: "0.1.0"
 description: >-
@@ -30,11 +30,11 @@ description: >-
   public seam exists yet, each guarded; no network, no model calls, no credentials, no shell commands,
   never approves anything. Needs plugins.isolation in_process to tell background-review writes from
   foreground ones.
-maintainer: OWNER
+maintainer: 12burb
 tier: community
 category: tools
 requires_hermes: ">=0.22.7"
-docs_url: https://github.com/OWNER/hermes-fledge#readme
+docs_url: https://github.com/12burb/hermes-fledge#readme
 platforms: []
 capabilities:
   provides_tools: []
