@@ -2,26 +2,33 @@
 
 Nothing here is a self-report. Every line comes from a command that was run, a log line, or the session DB of
 a real sandbox session. No ledger rows were written by hand, no hooks were called directly, and every failure
-was a real one (an actual exit 1, an actual user message).
+was a real one (an actual exit 1, an actual user message). Raw output: [tests/smoke-2026-11-05.txt](tests/smoke-2026-11-05.txt).
+
+Rules (checked 2026-11-05 against [the announcement](https://x.com/NousResearch/status/2118094256438936062)):
+cutoff 5 PM EST Wed Nov 11 (22:00 UTC) · entry = catalog PR + demo video on X tagging @NousResearch, under 90 s ·
+both links in the form · no label or title tag required.
 
 ## Environment
 
 | | |
 |---|---|
 | OS | Windows 11, ARM64 (native) |
-| Hermes validated | **v0.22.7** (tag, commit `b200f5bc60e3`, released 2026-11-03), Python 3.14.9 ARM64 |
-| How | a separate read-only checkout of v0.22.7 plus throwaway `HERMES_HOME`s (`%USERPROFILE%\fh\d` dev, `%USERPROFILE%\fh\m` demo) outside any real install, each running its own gateway (`gateway.run: … starting this home's gateway beside it`). No real profile was touched. |
+| Hermes validated | **v0.23.0** (current release, tag commit `2bd378ed`, 2026-11-05) and **v0.22.7** (`b200f5bc60e3`, 2026-11-03, the `requires_hermes` floor) |
+| Python | tests: 3.14 and 3.11.16 (143 passed on both); Hermes runtime: CPython 3.14 ARM64 |
+| How | separate read-only checkouts of v0.23.0 and v0.22.7 plus throwaway `HERMES_HOME`s (`%USERPROFILE%\fh\n` 0.23.0, `%USERPROFILE%\fh\d` dev and `%USERPROFILE%\fh\m` demo on 0.22.7) outside any real install, each running its own gateway (`gateway.run: … starting this home's gateway beside it`). No real profile was touched. |
 | Model | `glm-5.3` via OpenCode Go (API key; no OAuth tokens copied) |
 | Isolation | `plugins.isolation: in_process` (the 0.22.7 default, `hermes_cli/plugin_isolation.py:3`) |
-| Fledge | `5530c73` (all fixes below) |
+| Fledge | `057bc97` (all fixes below; installed on 0.23.0 with `hermes plugins install 12burb/hermes-fledge`) |
 
 ## 1. Unit and flow tests
 
 ```
 $ python -m pytest tests            # as received (5176ad4)
 93 passed
-$ python -m pytest tests            # 5530c73
-138 passed in 0.66s
+$ python -m pytest tests            # 057bc97, Python 3.14
+143 passed in 0.75s
+$ python -m pytest tests            # 057bc97, Python 3.11.16
+143 passed in 1.27s
 ```
 
 Every fix below came with a test that fails without it (checked by stashing the fix and re-running).
@@ -56,7 +63,16 @@ Ordering note: `_spawn_background_review` (`agent/turn_finalizer.py:871`) runs j
 (`:887`). The fork makes an LLM round trip before its first `skill_manage`, so in practice the turn is
 closed first. Fledge's `latest_finished_turn` also covers a user message that arrives while the review runs.
 
-## 3. Real loader (at `5530c73`)
+**0.23.0:** every internal above was re-checked in the v0.23.0 tag. All 17 functions Fledge imports have the same
+line and signature as in 0.22.7. These files are byte-identical: `tools/skill_provenance.py`, `tools/write_approval.py`,
+`tools/skill_usage.py`, `tools/skills_tool.py`, `tools/skills_sync.py`, `tools/skill_manager_tool.py`,
+`tools/approval_context.py`, `hermes_cli/write_approval_commands.py`, `hermes_cli/plugins.py`, `model_tools.py`,
+`agent/turn_finalizer.py` and `plugins/plugin_storage.py`. The three that changed don't touch what Fledge uses:
+`agent/turn_context.py` (+3 lines, the bot-chain call), `agent/background_review.py` (skips secret prompts in
+the review fork) and `tools/approval.py` (approval scopes). `pattern_key=f"plugin_rule:{rule_key}"` and the
+`post_approval_response` call are unchanged, and a timed-out prompt still reports `choice="timeout"`.
+
+## 3. Real loader (on 0.23.0 and 0.22.7)
 
 ```
 $ hermes plugins doctor . --ci
@@ -77,9 +93,26 @@ The only warnings are the expected private imports. Rule 9 warns on these withou
 is runtime rebinds, and `no core override` passes. `--install-deps` also passed. Fledge declares no
 dependencies; on Windows the isolated-runtime copy hits MAX_PATH on Hermes' own vendored test fixtures, which
 is a Hermes issue. The catalog entry, with placeholders filled, passes `scripts/validate_plugin_catalog.py`
-from both v0.22.7 and current `main`: `OK: 1 file(s) valid`.
+from both v0.22.7 and current `main`: `OK: 1 file(s) valid`. The same `doctor --ci` and `validate` output on
+0.23.0 is in the smoke log.
 
-## 4. Live smoke test
+## 4a. Live on Hermes 0.23.0 (installed from GitHub)
+
+`hermes plugins install 12burb/hermes-fledge --enable` → `Cloning https://github.com/12burb/hermes-fledge.git… ✓ Installed`.
+The running code was checked byte-identical to the v0.23.0 tag (`agent/bot_chain.py` exists only in 0.23.0).
+In-session `/fledge doctor`: all six checks ok.
+
+| Check | Result |
+|---|---|
+| Beat 1: bad-run save held, **origin = review** (the write-origin canary) | ✅ hold `922fc46d`, notice shown, `/fledge pending` lists it |
+| Approve path: `/fledge approve` → skill lands as a fledgling, `birth=approved`, counted as the user's (`agent_created=0`) | ✅ |
+| Foreground rewrite of a hand-edited skill → Hermes' approval prompt | ✅ the agent tried to patch it mid-turn; the prompt read "Fledge: Hermes wants to change 'water-test-results', which you edited by hand. Allow this change?"; left unanswered, it timed out as a deny and the skill was untouched |
+| Beat 3: autonomous `/refine` rewrite of the hand-edited skill → proposal | ✅ `9925ee4c` (origin review), rejected; the hand-written rule is still in SKILL.md |
+| Beat 2 (grounding by correction) | not re-run cleanly on 0.23.0. The take turned into a clarify dialog about ambiguous dates, and a keypress chose the dialog's default, so it was dropped rather than used. Passed on 0.22.7 (below); the hooks it uses are byte-identical |
+| Fledge errors in `errors.log` / `save gate error` in `agent.log` | none (the only matches are the folder name `fledge-sandbox` and the expected hold message) |
+
+## 4b. Live on Hermes 0.22.7
+
 
 Install: `hermes plugins install <local path>` is **not** accepted by 0.22.7 (owner/repo or Git URL only). Used
 a git clone into `<home>/plugins/fledge`, then `hermes plugins adopt fledge` and `hermes plugins enable fledge`.
@@ -204,6 +237,8 @@ Found live on Hermes 0.22.7:
 15. **A skill deleted before its use was judged came back as a veteran record.** Fixed with `bridge.skill_missing()`. `110cdfb`
 16. **A write already staged for review was also saved when Fledge's DB failed** (duplicate in the queue). Once staged, it stays held. `dea256c`
 17. **After a missed agent write, the agent's own change looked like a hand edit.** Fixed using Hermes' `last_patched_at` stamp. `5530c73`
+18. **A held write Hermes' queue failed to store was silently lost.** `stage_write` logs a disk failure and still returns a record (`tools/write_approval.py:74`, both releases), so Fledge said "held, don't retry" with nothing to approve. Now confirmed with `get_pending`; if missing, the save lands on probation with a notice. A hand-edited skill is still never overwritten. `931db8d`
+19. **A bare "No." answering the agent's own question counted against the turn** (weak signal: with one failing tool it reached "bad"). `pre_llm_call`'s `conversation_history` now shows whether the agent's last reply asked a question. `1ac1461`
 
 Found in code review (each confirmed by running the code first, then fixed with a test):
 

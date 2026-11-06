@@ -96,6 +96,11 @@ open the PR with the body below. Then send the form.
 > - Skills edited by hand are fingerprinted; autonomous rewrites or deletes of them become proposals in
 >   the same queue (optionally Hermes' content lock).
 >
+> **Not a duplicate (rule 16):** skill-lineage records where skill content came from and never blocks;
+> provenance-gate checks quoted user decisions; jev-curator governs curator consolidation;
+> pending-queue-monitor is a read-only Desktop view of the queue; memory-rewind keeps version history.
+> None of them judges a skill by how the run it came from actually went, or holds, probates and grounds it.
+>
 > **Surfaces:** nine hooks (`pre_llm_call`, `pre_tool_call`, `post_tool_call`, `on_session_end`,
 > `on_session_finalize`, `on_session_reset`, `on_skill_lifecycle`, `pre_command`,
 > `post_approval_response`), `register_command` (`/fledge`), `register_cli_command` (`hermes fledge`),
@@ -109,7 +114,7 @@ open the PR with the body below. Then send the form.
 > `hermes_cli.write_approval_commands.handle_pending_subcommand`; (3) curator actions:
 > `tools.skill_usage.archive_skill` / `set_locked` / `get_record`. All calls live in `bridge.py`, each
 > guarded, so a moved function disables one feature (reported by `/fledge doctor`) and never breaks a
-> turn. Happy to move to a `ctx` facade; issue draft below.
+> turn. Happy to move to a public `ctx.skills` facade if maintainers want one.
 >
 > **Disclosure:** reads hook payloads (tool statuses and error text, the first 280 characters of the next
 > user message) and skill folders to fingerprint them; writes its own SQLite under `plugin-data/fledge`
@@ -120,10 +125,16 @@ open the PR with the body below. Then send the form.
 > commands, no background processes; never approves anything; the gate lets writes through on its own
 > errors (except a write already queued for review, which stays held). Needs `plugins.isolation: in_process` (the default) for full accuracy.
 >
-> **Tested:** 138 unit and flow tests (`python -m pytest tests`); `hermes plugins doctor --ci` and
-> `hermes plugins validate --install-deps` on Hermes v0.22.7 (`b200f5b`, Windows 11 ARM64); live sessions
-> in an isolated HERMES_HOME, results in
-> [VALIDATION.md](https://github.com/12burb/hermes-fledge/blob/SHA/VALIDATION.md). Demo: VIDEO_LINK.
+> **Tested:** 143 unit and flow tests on Python 3.14 and 3.11 (`python -m pytest tests`); `hermes plugins
+> doctor --ci` and `hermes plugins validate` pass on Hermes **0.23.0** and **0.22.7** (Windows 11 ARM64). Live
+> sessions with a real model (glm-5.3) in throwaway HERMES_HOMEs: on 0.23.0, installed with `hermes plugins
+> install 12burb/hermes-fledge`, a bad-run save was held (origin review), approved onto probation, a
+> foreground rewrite of a hand-edited skill raised Hermes' approval prompt, and an autonomous rewrite became a
+> proposal; on 0.22.7, all three demo beats, watch mode, 13 clean review writes with 0 holds, and fail-open
+> under a locked database. 19 bugs found and fixed along the way, each with a test. Results in
+> [VALIDATION.md](https://github.com/12burb/hermes-fledge/blob/SHA/VALIDATION.md), raw output in
+> [tests/smoke-2026-11-05.txt](https://github.com/12burb/hermes-fledge/blob/SHA/tests/smoke-2026-11-05.txt).
+> Demo: VIDEO_LINK.
 
 ## 5. Optional: the issue that makes the imports go away
 

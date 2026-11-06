@@ -137,7 +137,7 @@ Where no public plugin seam exists yet, Fledge calls the same functions Hermes' 
 ## Development
 
 ```bash
-python -m pytest tests          # 138 tests, no Hermes install needed (Hermes surfaces are faked)
+python -m pytest tests          # 143 tests, no Hermes install needed (Hermes surfaces are faked)
 hermes plugins doctor . --ci    # real discovery, register(), hooks — in a temp HERMES_HOME
 hermes plugins validate .       # catalog admission checks
 ```

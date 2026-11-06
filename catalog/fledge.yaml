@@ -29,7 +29,11 @@ description: >-
   and tools.skill_usage (the functions behind /skills pending and hermes curator archive/lock) because no
   public seam exists yet, each guarded; no network, no model calls, no credentials, no shell commands,
   never approves anything. Needs plugins.isolation in_process to tell background-review writes from
-  foreground ones.
+  foreground ones. Measured on 2026-11-05: 143 tests passed on Python 3.14 and 3.11; `hermes plugins validate`
+  passes on Hermes 0.23.0 and 0.22.7 with only the private-import warnings above; live sessions with a real
+  model in isolated HERMES_HOMEs (bad-run hold, approve onto probation, grounding after a correction,
+  hand-edit proposal and approval prompt, watch mode, 13 clean writes with 0 holds, fail-open under a locked
+  database) in VALIDATION.md, raw output in tests/smoke-2026-11-05.txt.
 maintainer: 12burb
 tier: community
 category: tools
