@@ -325,6 +325,12 @@ class Fledge:
             if protect and known:
                 current = self.bridge.hash_skill(op.name)
                 if current and current != known:
+                    if self.bridge.last_written_by_hermes(op.name):
+                        # An agent write Fledge failed to record (e.g. its database was locked): re-baseline,
+                        # don't mistake the agent's own change for the user's.
+                        self.ledger.set_hash(op.name, current)
+                        self.ledger.add_event("rebaselined", op.name, "content last written by skill_manage")
+                        continue
                     self._flag_hand_edit(op.name, sid)
                     tuned.append(op.name)
         return tuned

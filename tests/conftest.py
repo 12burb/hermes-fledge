@@ -47,6 +47,7 @@ class FakeBridge:
         self.stage_fails = False
         self.commands: list = []
         self.missing: set = set()
+        self.agent_wrote_last: set = set()
 
     def capabilities(self) -> dict[str, str]:
         return {"write origin": "ok", "pending queue": "ok"}
@@ -87,6 +88,9 @@ class FakeBridge:
 
     def skill_missing(self, name: str) -> bool:
         return name in self.missing
+
+    def last_written_by_hermes(self, name: str) -> bool:
+        return name in self.agent_wrote_last
 
     def skill_roots(self) -> list:
         return []

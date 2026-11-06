@@ -79,3 +79,37 @@ def test_missing_content_lock_degrades_only_that_feature(monkeypatch):
     assert bridge.created_by("x") == "agent"
     assert bridge.set_locked("x", True) is False
     assert "content lock" in bridge._failures and "archive" not in bridge._failures
+
+
+def test_last_written_by_hermes_compares_files_with_hermes_own_write_stamp(monkeypatch, tmp_path):
+    import os
+    import sys
+    import types
+    from datetime import datetime, timezone
+
+    skill = tmp_path / "water"
+    (skill / "references").mkdir(parents=True)
+    (skill / "SKILL.md").write_text("v2")
+    (skill / "references" / "notes.md").write_text("n")
+    for f in (skill / "SKILL.md", skill / "references" / "notes.md"):
+        os.utime(f, (1_000_000, 1_000_000))
+    stamp = {"last_patched_at": datetime.fromtimestamp(1_000_000.5, timezone.utc).isoformat()}
+
+    tools = types.ModuleType("tools")
+    tools.__path__ = []
+    usage = types.ModuleType("tools.skill_usage")
+    usage.get_record = lambda name: stamp
+    monkeypatch.setitem(sys.modules, "tools", tools)
+    monkeypatch.setitem(sys.modules, "tools.skill_usage", usage)
+    bridge = HermesBridge()
+    monkeypatch.setattr(bridge, "locate_skill_dir", lambda name: skill)
+
+    assert bridge.last_written_by_hermes("water") is True       # files are as skill_manage left them
+    os.utime(skill / "references" / "notes.md", (1_000_100, 1_000_100))
+    assert bridge.last_written_by_hermes("water") is False      # a file changed after Hermes' last write
+    stamp.clear()
+    assert bridge.last_written_by_hermes("water") is False      # never written by skill_manage
+
+
+def test_last_written_by_hermes_is_false_without_hermes(isolated_home):
+    assert HermesBridge().last_written_by_hermes("x") is False

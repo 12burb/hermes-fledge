@@ -246,6 +246,25 @@ class HermesBridge:
 
     # -- curator actions ---------------------------------------------------------------------------------
 
+    def last_written_by_hermes(self, name: str) -> bool:
+        """True when no file in the skill's folder is newer than Hermes' own stamp for its last skill_manage
+        write (``last_patched_at``, set right after every patch/edit/write_file/remove_file): the content on
+        disk came from the agent, even if Fledge missed recording it. A hand edit is never stamped."""
+        try:
+            from datetime import datetime
+            from tools.skill_usage import get_record
+            record = get_record(name)
+            stamp = record.get("last_patched_at") if isinstance(record, dict) else None
+            directory = self.locate_skill_dir(name) if stamp else None
+            if not stamp or directory is None:
+                return False
+            written = datetime.fromisoformat(str(stamp).replace("Z", "+00:00")).timestamp()
+            newest = max((p.stat().st_mtime for p in Path(directory).rglob("*") if p.is_file()), default=0.0)
+            return 0.0 < newest <= written + 1.0
+        except Exception as exc:
+            self._fail("archive", exc)
+            return False
+
     def created_by(self, name: str) -> str:
         """Hermes' curator-management marker: 'agent' (background review), 'learn', 'installed' or ''."""
         try:

@@ -520,3 +520,18 @@ def test_a_failure_before_staging_still_fails_open(engine, bridge, monkeypatch):
     monkeypatch.setattr(engine.ledger, "find_hold", broken)
     assert review_save(engine, bridge) is None  # the write goes through
     assert not bridge.staged
+
+
+def test_an_agent_write_fledge_missed_is_not_taken_for_a_hand_edit(engine, bridge):
+    """Live finding (Hermes 0.22.7): while Fledge's DB was locked, an agent patch landed unrecorded; the next
+    autonomous patch saw a changed fingerprint and called it a hand edit (a false positive)."""
+    bridge.hashes["lights"] = "h1"
+    turn(engine, "t1", "x")
+    review_save(engine, bridge, args={"operations": [{"action": "create", "name": "lights", "content": "v1"}]})
+    bridge.hashes["lights"] = "h2"
+    bridge.agent_wrote_last.add("lights")  # Hermes stamped the write; no file is newer than the stamp
+    turn(engine, "t2", "turn on the porch lights", [("terminal", "ok", "")])
+    patch = {"operations": [{"action": "patch", "name": "lights", "old_string": "a", "new_string": "b"}]}
+    assert review_save(engine, bridge, args=patch) is None
+    record = engine.ledger.get_skill("lights")
+    assert not record["human_tuned"] and record["agent_hash"] == "h2"
