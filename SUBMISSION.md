@@ -13,6 +13,16 @@ and `plugin-catalog/README.md` on `NousResearch/hermes-agent` `main` (entry sche
   or a skill could. Catalog CI runs once a maintainer starts it; entries are reviewed every few days.
 - Accepted entries are listed in the Hermes Marketplace (`hermes-agent.nousresearch.com/marketplace`).
 
+## Status
+
+- Repo public: https://github.com/12burb/hermes-fledge
+- Catalog PR open: https://github.com/NousResearch/hermes-agent/pull/149856
+  (`feat(plugin-catalog): add fledge plugin`, branch `12burb:add-fledge`, pinned to `a7b6c4900828b30f7193beaa97f392d9bd2956b9`)
+- Still to do: record and post the demo video on X tagging @NousResearch, edit the video link into the PR
+  body ("Screenshots / Logs"), then send both links through https://form.typeform.com/to/FwJLvOln before
+  5 PM EST Wed Nov 11. A fix after the pin = push, then a new commit on `add-fledge` re-pinning `sha`
+  (never a second PR).
+
 ## 1. Publish the repo
 
 ```bash
@@ -69,7 +79,7 @@ open the PR with the body below. Then send the form.
 
 ### PR title
 
-`plugin-catalog: add fledge (evidence-gated skill saves, probation, hand-edit protection)`
+`feat(plugin-catalog): add fledge plugin` (the convention merged catalog PRs use; body follows the repo's PR template)
 
 ### PR body
 
