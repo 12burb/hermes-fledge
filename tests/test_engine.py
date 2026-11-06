@@ -570,3 +570,33 @@ def test_no_to_the_agents_question_does_not_count_against_a_bad_turn(engine, bri
     engine.hook_pre_llm_call(session_id=SID, turn_id="t2", user_message="No.", conversation_history=history,
                              task_id=SID)
     assert not any(e["kind"] == "corrected" for e in engine.ledger.recent_events(20))
+
+
+def test_a_hold_notice_is_posted_right_away_when_the_session_is_reachable(engine, bridge, ctx):
+    """Live finding: the hold notice only appeared after the user typed again. The review fork inherits the
+    turn's session binding, so Fledge now tries to post at once (off the hook's thread)."""
+    turn(engine, "t1", "pull the results", BAD_RUN)
+    review_save(engine, bridge)
+    for thread in [t for t in __import__("threading").enumerate() if t.name == "fledge-notice"]:
+        thread.join(5)
+    assert any("held skill 'pull-water-results'" in p for p in ctx.posted)
+    turn(engine, "t2", "ok")
+    assert sum("held skill 'pull-water-results'" in p for p in ctx.posted) == 1  # posted once, not again
+
+
+def test_an_unreachable_session_keeps_the_notice_for_the_next_turn(engine, bridge, ctx):
+    ctx.post_ok = False
+    turn(engine, "t1", "pull the results", BAD_RUN)
+    review_save(engine, bridge)
+    for thread in [t for t in __import__("threading").enumerate() if t.name == "fledge-notice"]:
+        thread.join(5)
+    assert not ctx.posted
+    ctx.post_ok = True
+    turn(engine, "t2", "ok")
+    assert any("held skill 'pull-water-results'" in p for p in ctx.posted)
+
+
+def test_skill_report_says_an_approved_save_in_words(engine, bridge):
+    from fledge import report
+    assert report.birth_phrase("approved") == "you approved it from the review queue"
+    assert report.birth_phrase(None) == "the run was not seen"

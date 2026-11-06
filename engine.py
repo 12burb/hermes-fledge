@@ -241,7 +241,7 @@ class Fledge:
             name, origin=origin, agent_created=agent_created, session_id=sid, turn_id=turn_id,
             birth_level=birth.level, birth_reasons=list(birth.reasons), agent_hash=self.bridge.hash_skill(name))
         self.ledger.add_event("written", name, f"{action} by {origin} (gen {record['generation']}); "
-                                               f"run looked {birth.level}")
+                                               + report.birth_phrase(birth.level))
 
     def _expire_inflight(self) -> None:
         now = self._clock()
@@ -385,6 +385,7 @@ class Fledge:
                 self.ledger.add_event("hold-failed", name, "pending queue unavailable; saved on probation: "
                                       + "; ".join(decision.reasons[:2]))
             self.notifier.queue(sid, report.hold_failed_notice(decision))
+            self.notifier.flush_soon(sid)
             return None
         # From here the write sits in Hermes' queue, so it IS held: Fledge's own bookkeeping is best-effort.
         # Failing open now would save the skill AND leave a copy in the queue to be applied a second time.
@@ -398,6 +399,7 @@ class Fledge:
             logger.warning("fledge: could not record hold %s; it is still in Hermes' queue", pending_id,
                            exc_info=True)
         self.notifier.queue(sid, report.user_hold_notice(decision, pending_id))
+        self.notifier.flush_soon(sid)  # show it now if the session is reachable; else at the next turn
         return {"action": "block", "message": report.model_hold_message(decision, pending_id)}
 
     def _gist(self, ops: list[SkillOp], batch: bool) -> str:

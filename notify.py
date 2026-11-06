@@ -4,6 +4,7 @@ next foreground hook of that session (turn start or turn end). Never raises."""
 
 from __future__ import annotations
 
+import contextvars
 import logging
 import threading
 from collections import OrderedDict
@@ -35,6 +36,22 @@ class Notifier:
             self._queue.move_to_end(key)
             while len(self._queue) > _MAX_SESSIONS:
                 self._queue.popitem(last=False)
+
+    def flush_soon(self, session_id: str) -> threading.Thread | None:
+        """Try to post now, from a short-lived thread running in a copy of the caller's context (the
+        background-review fork inherits its turn's session binding). The hook never waits on the post;
+        anything that can't be posted stays queued for the next foreground hook, as before."""
+        if not self.pending(session_id):
+            return None
+        try:
+            ctx = contextvars.copy_context()
+            thread = threading.Thread(target=ctx.run, args=(self.flush, session_id), name="fledge-notice",
+                                      daemon=True)
+            thread.start()
+            return thread
+        except Exception:
+            logger.debug("fledge: could not start a notice thread", exc_info=True)
+            return None
 
     def pending(self, session_id: str) -> list[str]:
         with self._lock:

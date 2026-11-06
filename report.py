@@ -80,6 +80,13 @@ def user_hold_notice(decision: Decision, pending_id: str | None) -> str:
     return f"blocked skill {names}: it was learned from a run that went wrong ({_short(decision.reasons)})."
 
 
+def birth_phrase(level: str | None) -> str:
+    """How the run a skill was saved from looked, in words."""
+    return {"clean": "the run looked clean", "uncertain": "the run was unclear",
+            "bad": "the run went wrong", "approved": "you approved it from the review queue",
+            "unknown": "the run was not seen"}.get(level or "", "the run was not seen")
+
+
 def hold_failed_notice(decision: Decision) -> str:
     return (f"could not hold {_names(decision.skills)} (Hermes' review queue is unavailable; /fledge doctor), so it "
             f"was saved on probation instead. It was learned from a run that went wrong "
@@ -156,7 +163,7 @@ def skill_detail(ledger: Any, name: str) -> str:
                  f"{record['total_clean']} clean, {record['total_bad']} bad")
     if record.get("origin"):
         who = "Hermes on its own (background review)" if record["origin"] == "review" else "a foreground turn"
-        lines.append(f"  last saved by {who}; the run it learned from looked {record.get('birth_level') or 'n/a'}")
+        lines.append(f"  last saved by {who}; {birth_phrase(record.get('birth_level'))}")
         for reason in (record.get("birth_reasons") or [])[:3]:
             lines.append(f"    · {reason}")
     if record.get("human_tuned"):
