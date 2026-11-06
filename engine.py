@@ -497,7 +497,7 @@ class Fledge:
         if sub in ("help", "-h", "--help"):
             return report.HELP
         if sub == "doctor":
-            return report.doctor(self.bridge.capabilities(), self.s)
+            return report.doctor(self.bridge.capabilities(), self.s, self.settings_loader.ignored())
         if sub == "mode":
             return self.set_mode(arg)
         if sub == "pending":

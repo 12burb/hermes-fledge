@@ -120,8 +120,16 @@ class SettingsLoader:
         self._cached: Settings | None = None
         self._at = 0.0
         self._warned: set[str] = set()
+        self._ignored: list[str] = []
+
+    def ignored(self) -> list[str]:
+        """Settings the last read could not use (shown by /fledge doctor so a typo isn't silent)."""
+        self.get()
+        with self._lock:
+            return list(self._ignored)
 
     def _warn_once(self, message: str) -> None:
+        self._ignored.append(message.removeprefix("fledge: "))
         if message not in self._warned:
             self._warned.add(message)
             logger.warning(message)
@@ -130,6 +138,7 @@ class SettingsLoader:
         with self._lock:
             now = self._clock()
             if self._cached is None or now - self._at >= self._ttl:
+                self._ignored = []
                 self._cached = build_settings(self._getter, self._warn_once)
                 self._at = now
             return self._cached

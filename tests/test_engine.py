@@ -600,3 +600,20 @@ def test_skill_report_says_an_approved_save_in_words(engine, bridge):
     from fledge import report
     assert report.birth_phrase("approved") == "you approved it from the review queue"
     assert report.birth_phrase(None) == "the run was not seen"
+
+
+def test_doctor_says_which_settings_it_ignored(engine, ctx):
+    """Live finding: a typo'd setting silently fell back to its default; /fledge doctor showed the default
+    with no hint the user's value had been ignored (only agent.log said so)."""
+    ctx.config["mode"] = "banana"
+    ctx.config["graduate_after"] = -4
+    engine.settings_loader.invalidate()
+    out = engine.command("doctor")
+    assert "mode=enforce" in out
+    assert "!! setting 'mode' ignored" in out and "'banana'" in out
+    assert "!! setting 'graduate_after' ignored" in out
+    ctx.config["mode"] = "watch"
+    ctx.config["graduate_after"] = 3
+    engine.settings_loader.invalidate()
+    out = engine.command("doctor")
+    assert "ignored" not in out and "mode=watch" in out

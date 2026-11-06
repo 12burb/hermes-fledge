@@ -178,7 +178,7 @@ def skill_detail(ledger: Any, name: str) -> str:
     return "\n".join(lines)
 
 
-def doctor(capabilities: dict[str, str], settings: Settings) -> str:
+def doctor(capabilities: dict[str, str], settings: Settings, ignored: list[str] | None = None) -> str:
     lines = ["Fledge doctor"]
     for feature, state in capabilities.items():
         mark = "ok " if state == "ok" else "!! "
@@ -187,6 +187,8 @@ def doctor(capabilities: dict[str, str], settings: Settings) -> str:
                  f"graduate_after={settings.graduate_after} ground_after={settings.ground_after} "
                  f"auto_archive={settings.auto_archive} on_hand_edit={settings.on_hand_edit} "
                  f"foreground_bad_run={settings.foreground_bad_run}")
+    for message in ignored or []:
+        lines.append(f"  !! {message}")
     if any(state != "ok" for state in capabilities.values()):
         lines.append("  A '!!' feature is off; everything else keeps working. Fledge needs plugins.isolation: "
                      "in_process to tell background-review writes from foreground ones.")
