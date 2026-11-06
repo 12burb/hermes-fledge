@@ -366,10 +366,17 @@ class Fledge:
         gist = self._gist(ops, batch)
         summary = report.pending_summary(gist, decision)
         pending_id = self.bridge.stage_skill_write(payload, summary)
-        self.ledger.add_hold(pending_id=pending_id or "", digest=digest, kind=decision.kind, skills=decision.skills,
-                             session_id=sid, origin=origin, summary=summary, reasons=decision.reasons)
-        for name in decision.skills:
-            self.ledger.add_event("held", name, f"{decision.kind}: " + "; ".join(decision.reasons[:3]))
+        # From here the write sits in Hermes' queue, so it IS held: Fledge's own bookkeeping is best-effort.
+        # Failing open now would save the skill AND leave a copy in the queue to be applied a second time.
+        try:
+            self.ledger.add_hold(pending_id=pending_id or "", digest=digest, kind=decision.kind,
+                                 skills=decision.skills, session_id=sid, origin=origin, summary=summary,
+                                 reasons=decision.reasons)
+            for name in decision.skills:
+                self.ledger.add_event("held", name, f"{decision.kind}: " + "; ".join(decision.reasons[:3]))
+        except Exception:
+            logger.warning("fledge: could not record hold %s; it is still in Hermes' queue", pending_id,
+                           exc_info=True)
         self.notifier.queue(sid, report.user_hold_notice(decision, pending_id))
         return {"action": "block", "message": report.model_hold_message(decision, pending_id)}
 
@@ -511,7 +518,9 @@ class Fledge:
         pending_id = pending_id.split()[0] if pending_id else ""
         if not pending_id:
             return f"Usage: /fledge {action} ID (see /fledge pending)"
-        if not any(h.get("pending_id") == pending_id for h in self.ledger.recent_holds(500)):
+        waiting = self.bridge.pending_ids() or set()
+        if pending_id not in waiting and \
+                not any(h.get("pending_id") == pending_id for h in self.ledger.recent_holds(500)):
             return f"Fledge has no held write '{pending_id}'. Other pending writes: /skills pending (CLI)."
         result = self.bridge.pending_command([action, pending_id])
         if result is None:

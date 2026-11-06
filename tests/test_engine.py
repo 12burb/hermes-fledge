@@ -493,3 +493,30 @@ def test_a_skill_deleted_before_its_use_is_judged_is_not_resurrected(engine, bri
     turn(engine, "t2", "thanks")  # the next turn finalizes t1
     engine.hook_on_session_finalize(session_id=SID)
     assert engine.ledger.get_skill("csv-wrangling") is None
+
+
+def test_a_staged_hold_still_blocks_when_fledges_ledger_fails(engine, bridge, monkeypatch):
+    """Live finding (Hermes 0.22.7, another process held Fledge's DB locked): the write was staged in Hermes'
+    queue, recording it raised, and failing open then saved the skill too, leaving a duplicate to approve."""
+    import sqlite3
+    turn(engine, "t1", "pull the results", BAD_RUN)
+
+    def locked(*_a, **_k):
+        raise sqlite3.OperationalError("database is locked")
+    monkeypatch.setattr(engine.ledger, "add_hold", locked)
+    directive = review_save(engine, bridge)
+    assert directive["action"] == "block" and "p0001" in directive["message"]
+    assert engine.ledger.get_skill("pull-water-results") is None  # not also saved
+    # The user can still review it through Fledge even though Fledge never recorded it.
+    assert engine._review("reject", "p0001").startswith("Rejected")
+    assert "p0001" not in bridge.pending
+
+
+def test_a_failure_before_staging_still_fails_open(engine, bridge, monkeypatch):
+    turn(engine, "t1", "pull the results", BAD_RUN)
+
+    def broken(*_a, **_k):
+        raise RuntimeError("bug")
+    monkeypatch.setattr(engine.ledger, "find_hold", broken)
+    assert review_save(engine, bridge) is None  # the write goes through
+    assert not bridge.staged
