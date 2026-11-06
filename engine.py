@@ -297,7 +297,10 @@ class Fledge:
         if decision.action == ASK:
             self._mark_inflight(targets, sid, turn, origin)  # the user may approve it
             return self._ask(decision)
-        return self._hold(args, ops, batch, decision, sid, origin)
+        directive = self._hold(args, ops, batch, decision, sid, origin)
+        if directive is None:
+            self._mark_inflight(targets, sid, turn, origin)  # failed open: the write lands, on probation
+        return directive
 
     def _mark_inflight(self, targets: list[SkillOp], sid: str, turn: Turn | None, origin: str) -> None:
         with self._lock:
@@ -356,7 +359,7 @@ class Fledge:
         return {"action": "approve", "message": message, "rule_key": f"fledge:{decision.kind}:{key}"}
 
     def _hold(self, args: Any, ops: list[SkillOp], batch: bool, decision: Decision, sid: str,
-              origin: str) -> dict[str, Any]:
+              origin: str) -> dict[str, Any] | None:
         payload = staging_payload(args if isinstance(args, dict) else {}, ops, batch)
         if batch and isinstance(args, dict) and args.get("name") and any(not o.op.get("name") for o in ops):
             # Legacy top-level default name: /skills approve replays it as skill_manage(name=...) ->
@@ -372,6 +375,15 @@ class Fledge:
         gist = self._gist(ops, batch)
         summary = report.pending_summary(gist, decision)
         pending_id = self.bridge.stage_skill_write(payload, summary)
+        if not pending_id and decision.kind != KIND_HAND_TUNED:
+            # The queue can't take it: fail open rather than drop a skill nobody could ever approve. It lands
+            # on probation (born from a bad run, so its next bad runs ground it). A hand-tuned skill is the
+            # exception: an autonomous rewrite is never allowed to overwrite the user's edit.
+            for name in decision.skills:
+                self.ledger.add_event("hold-failed", name, "pending queue unavailable; saved on probation: "
+                                      + "; ".join(decision.reasons[:2]))
+            self.notifier.queue(sid, report.hold_failed_notice(decision))
+            return None
         # From here the write sits in Hermes' queue, so it IS held: Fledge's own bookkeeping is best-effort.
         # Failing open now would save the skill AND leave a copy in the queue to be applied a second time.
         try:

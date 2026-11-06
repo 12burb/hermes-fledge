@@ -113,3 +113,25 @@ def test_last_written_by_hermes_compares_files_with_hermes_own_write_stamp(monke
 
 def test_last_written_by_hermes_is_false_without_hermes(isolated_home):
     assert HermesBridge().last_written_by_hermes("x") is False
+
+
+def test_a_staged_write_missing_from_disk_is_not_reported_as_held(monkeypatch):
+    """stage_write logs a disk failure and still returns a record; confirm it with get_pending."""
+    import sys
+    import types
+    tools = types.ModuleType("tools")
+    tools.__path__ = []
+    wa = types.ModuleType("tools.write_approval")
+    wa.SKILLS = "skills"
+    wa.current_origin = lambda: "background_review"
+    wa.stage_write = lambda subsystem, payload, *, summary, origin: {"id": "abcd1234"}
+    stored: dict = {}
+    wa.get_pending = lambda subsystem, pid: stored.get(pid)
+    tools.write_approval = wa
+    monkeypatch.setitem(sys.modules, "tools", tools)
+    monkeypatch.setitem(sys.modules, "tools.write_approval", wa)
+    bridge = HermesBridge()
+    assert bridge.stage_skill_write({"action": "create"}, "s") is None
+    assert "pending queue" in bridge._failures
+    stored["abcd1234"] = {"id": "abcd1234"}
+    assert HermesBridge().stage_skill_write({"action": "create"}, "s") == "abcd1234"

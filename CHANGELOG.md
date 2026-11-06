@@ -34,6 +34,9 @@ Validated against Hermes v0.22.7 before release (see VALIDATION.md), which chang
 - Fails open more carefully: a write already staged in Hermes' review queue stays held even if Fledge's own
   database then fails (it was being saved *and* queued); an agent write Fledge missed recording is recognized
   from Hermes' `last_patched_at` stamp instead of being mistaken for a hand edit.
+- A held write Hermes' queue failed to store (`stage_write` returns a record even when its disk write fails)
+  is confirmed with `get_pending`; if it is missing, the skill is saved on probation with a notice instead of
+  being silently dropped. Hand-edited skills are still never overwritten.
 - A skill deleted before its use is judged is not re-created in the ledger; `/fledge reject` logs `rejected`;
   `/fledge diff|approve|reject` accept any id in Hermes' queue.
 - `/fledge doctor` reports archive and content lock separately (the lock needs Hermes 0.22.7).

@@ -80,6 +80,12 @@ def user_hold_notice(decision: Decision, pending_id: str | None) -> str:
     return f"blocked skill {names}: it was learned from a run that went wrong ({_short(decision.reasons)})."
 
 
+def hold_failed_notice(decision: Decision) -> str:
+    return (f"could not hold {_names(decision.skills)} (Hermes' review queue is unavailable; /fledge doctor), so it "
+            f"was saved on probation instead. It was learned from a run that went wrong "
+            f"({_short(decision.reasons)}); it is grounded if its next runs go wrong too.")
+
+
 def ground_notice(name: str, reason: str, *, archived: bool, agent_created: bool, watch: bool) -> str:
     if watch:
         return f"[watch mode] would ground '{name}': {reason}."

@@ -119,6 +119,10 @@ class HermesBridge:
             origin = wa.current_origin() if hasattr(wa, "current_origin") else (self.raw_origin() or "foreground")
             record = wa.stage_write(wa.SKILLS, payload, summary=summary, origin=origin)
             pending_id = str(record.get("id") or "") if isinstance(record, dict) else ""
+            if pending_id and hasattr(wa, "get_pending") and wa.get_pending(wa.SKILLS, pending_id) is None:
+                # stage_write logs a disk failure and still returns a record (tools/write_approval.py:74):
+                # the write is NOT in the queue, so nobody could ever approve it.
+                raise OSError(f"staged write {pending_id} is not in the pending queue (disk write failed)")
             return pending_id or None
         except Exception as exc:
             self._fail("pending queue", exc)

@@ -535,3 +535,27 @@ def test_an_agent_write_fledge_missed_is_not_taken_for_a_hand_edit(engine, bridg
     assert review_save(engine, bridge, args=patch) is None
     record = engine.ledger.get_skill("lights")
     assert not record["human_tuned"] and record["agent_hash"] == "h2"
+
+
+def test_a_bad_run_save_the_queue_cannot_take_lands_on_probation(engine, bridge, ctx):
+    """Hermes' stage_write returns a record even when its disk write failed (tools/write_approval.py:74).
+    Blocking then would drop a skill nobody could ever approve: fail open, on probation, with a notice."""
+    bridge.stage_fails = True
+    turn(engine, "t1", "pull the results", BAD_RUN)
+    assert review_save(engine, bridge) is None  # the write goes through
+    record = engine.ledger.get_skill("pull-water-results")
+    assert record["state"] == FLEDGLING
+    assert any(e["kind"] == "hold-failed" for e in engine.ledger.recent_events(10))
+    turn(engine, "t2", "ok")
+    assert any("could not hold 'pull-water-results'" in p and "saved on probation" in p for p in ctx.posted)
+
+
+def test_a_hand_edit_is_never_overwritten_even_when_the_queue_fails(engine, bridge):
+    bridge.hashes["lights"] = "h1"
+    turn(engine, "t1", "x")
+    review_save(engine, bridge, args={"operations": [{"action": "create", "name": "lights", "content": "v1"}]})
+    bridge.hashes["lights"] = "h2"  # hand edit
+    bridge.stage_fails = True
+    turn(engine, "t2", "porch lights", [("terminal", "ok", "")])
+    patch = {"operations": [{"action": "patch", "name": "lights", "old_string": "a", "new_string": "b"}]}
+    assert review_save(engine, bridge, args=patch)["action"] == "block"
