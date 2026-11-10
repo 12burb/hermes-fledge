@@ -17,7 +17,7 @@ and `plugin-catalog/README.md` on `NousResearch/hermes-agent` `main` (entry sche
 
 - Repo public: https://github.com/12burb/hermes-fledge
 - Catalog PR open: https://github.com/NousResearch/hermes-agent/pull/149856
-  (`feat(plugin-catalog): add fledge plugin`, branch `12burb:add-fledge`, pinned to `ac65b416d34381acba8642133cfa1d286e052028`)
+  (`feat(plugin-catalog): add fledge plugin`, branch `12burb:add-fledge`, pinned to `4fa935b5bd3dce420c8266c4b2ebce3c13414fec` after the review fix of 2026-11-10)
 - Still to do: record and post the demo video on X tagging @NousResearch, edit the video link into the PR
   body ("Screenshots / Logs"), then send both links through https://form.typeform.com/to/FwJLvOln before
   5 PM EST Wed Nov 11. A fix after the pin = push, then a new commit on `add-fledge` re-pinning `sha`
