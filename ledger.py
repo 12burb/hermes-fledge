@@ -1,8 +1,9 @@
 """Fledge's durable record: skills on probation, their real runs, holds, and an event log.
 
-Lives in ``<HERMES_HOME>/plugin-data/fledge/data.db`` (``plugins.plugin_storage.plugin_db``), so it
-follows the active profile and survives plugin updates. Stores skill names, hashes, verdict reasons
-and session/turn ids; never message text or skill content.
+Lives in ``<HERMES_HOME>/plugin-data/fledge/data.db`` (``plugins.plugin_storage.plugin_db``), one file
+per profile, and survives plugin updates. A process serving several profiles keeps one connection per
+profile home. Stores skill names, hashes, verdict reasons and session/turn ids; never message text or
+skill content.
 """
 
 from __future__ import annotations
@@ -87,36 +88,48 @@ def _row(cursor: sqlite3.Cursor, row: tuple) -> dict[str, Any]:
 
 
 class Ledger:
-    """Small synchronous SQLite store; one connection guarded by a lock (writes are tiny)."""
+    """Small synchronous SQLite store; one connection per profile, guarded by a lock (writes are tiny).
 
-    def __init__(self, connect: Callable[[], sqlite3.Connection], clock: Callable[[], float] = time.time):
+    One Hermes process can serve several profiles, switching the active home per call, and ``connect``
+    opens the active profile's database. ``key`` names that profile, so each one keeps its own
+    connection and no profile ever reads or writes another's records.
+    """
+
+    def __init__(self, connect: Callable[[], sqlite3.Connection], clock: Callable[[], float] = time.time,
+                 *, key: Callable[[], str] = lambda: ""):
         self._connect = connect
         self._clock = clock
+        self._key = key
         self._lock = threading.RLock()
-        self._conn: sqlite3.Connection | None = None
+        self._conns: dict[str, sqlite3.Connection] = {}
 
     @property
     def conn(self) -> sqlite3.Connection:
-        if self._conn is None:
+        """The active profile's connection (callers hold the lock)."""
+        key = self._key()
+        conn = self._conns.get(key)
+        if conn is None:
             conn = self._connect()
             conn.row_factory = _row
             conn.executescript(_SCHEMA)
             conn.commit()
-            self._conn = conn
-        return self._conn
+            self._conns[key] = conn
+        return conn
 
     def close(self) -> None:
         with self._lock:
-            if self._conn is not None:
-                try:
-                    self._conn.close()
-                finally:
-                    self._conn = None
+            conns, self._conns = list(self._conns.values()), {}
+        for conn in conns:
+            try:
+                conn.close()
+            except Exception:  # pragma: no cover - closing is best effort
+                pass
 
     def _exec(self, sql: str, params: Iterable[Any] = ()) -> sqlite3.Cursor:
         with self._lock:
-            cur = self.conn.execute(sql, tuple(params))
-            self.conn.commit()
+            conn = self.conn  # resolved once: the statement and its commit go to the same profile
+            cur = conn.execute(sql, tuple(params))
+            conn.commit()
             return cur
 
     def _all(self, sql: str, params: Iterable[Any] = ()) -> list[dict[str, Any]]:

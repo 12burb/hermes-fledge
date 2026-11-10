@@ -4,9 +4,11 @@ the real-loader checks are ``hermes plugins doctor`` / ``hermes plugins validate
 
 from __future__ import annotations
 
+import contextvars
 import importlib.util
 import sqlite3
 import sys
+import types
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -120,6 +122,9 @@ class FakeBridge:
         self.locked[name] = locked
         return True
 
+    def home_key(self) -> str:
+        return "test-home"
+
     def connect_db(self) -> sqlite3.Connection:
         return sqlite3.connect(":memory:", check_same_thread=False)
 
@@ -171,6 +176,35 @@ def isolated_home(tmp_path, monkeypatch):
     """Anything that falls back to the real bridge writes under a throwaway HERMES_HOME."""
     monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes-home"))
     return tmp_path / "hermes-home"
+
+
+@pytest.fixture
+def profiles(tmp_path, monkeypatch):
+    """Stand-ins for ``hermes_constants.get_hermes_home`` and ``plugins.plugin_storage.plugin_db``, the two
+    Hermes pieces the real bridge stores through. ``switch(name)`` makes another profile the active one,
+    the way a gateway serving several profiles does between calls."""
+    active = contextvars.ContextVar("active_home", default=str(tmp_path / "alpha"))
+
+    constants = types.ModuleType("hermes_constants")
+    constants.get_hermes_home = lambda: Path(active.get())
+
+    def plugin_db(name: str) -> sqlite3.Connection:
+        folder = constants.get_hermes_home() / "plugin-data" / name
+        folder.mkdir(parents=True, exist_ok=True)
+        return sqlite3.connect(folder / "data.db", check_same_thread=False)
+
+    storage = types.ModuleType("plugins.plugin_storage")
+    storage.plugin_db = plugin_db
+    package = types.ModuleType("plugins")
+    package.plugin_storage = storage
+    monkeypatch.setitem(sys.modules, "hermes_constants", constants)
+    monkeypatch.setitem(sys.modules, "plugins", package)
+    monkeypatch.setitem(sys.modules, "plugins.plugin_storage", storage)
+
+    def switch(name: str) -> None:
+        active.set(str(tmp_path / name))
+
+    return SimpleNamespace(switch=switch, root=tmp_path)
 
 
 @pytest.fixture

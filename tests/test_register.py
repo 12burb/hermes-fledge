@@ -46,7 +46,7 @@ def test_manifest_basics():
     assert MANIFEST["manifest_version"] == 2
 
 
-def test_cli_parser_and_handler(capsys):
+def test_cli_parser_and_handler(capsys, profiles):  # the real bridge stores through Hermes
     ctx = FakeCtx()
     fledge.register(ctx)
     setup_fn, handler = ctx.cli["fledge"]

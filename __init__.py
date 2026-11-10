@@ -25,14 +25,15 @@ logger = logging.getLogger(__name__)
 def build(ctx: Any, bridge: Any = None) -> Fledge:
     """Wire a Fledge engine to a plugin context (tests pass fakes for both)."""
     bridge = bridge or HermesBridge()
-    settings = SettingsLoader(ctx.get_config)
+    settings = SettingsLoader(ctx.get_config, key=bridge.home_key)
 
     def post(text: str) -> Any:
         poster = getattr(ctx, "post_message", None)
         return poster(text) if callable(poster) else None
 
     notifier = Notifier(post, lambda: settings.get().notify)
-    return Fledge(settings=settings, bridge=bridge, ledger=Ledger(bridge.connect_db), tracker=EvidenceTracker(),
+    return Fledge(settings=settings, bridge=bridge, ledger=Ledger(bridge.connect_db, key=bridge.home_key),
+                  tracker=EvidenceTracker(),
                   notifier=notifier, set_config=getattr(ctx, "set_config", None))
 
 

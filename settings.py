@@ -110,23 +110,31 @@ def build_settings(getter: Callable[..., Any], warn: Callable[[str], None] | Non
 
 
 class SettingsLoader:
-    """TTL-cached Settings; thread-safe."""
+    """TTL-cached Settings, one cache entry per profile (``key`` names the active one); thread-safe."""
 
-    def __init__(self, getter: Callable[..., Any], ttl: float = 2.0, clock: Callable[[], float] = time.monotonic):
+    def __init__(self, getter: Callable[..., Any], ttl: float = 2.0, clock: Callable[[], float] = time.monotonic,
+                 *, key: Callable[[], str] = lambda: ""):
         self._getter = getter
         self._ttl = ttl
         self._clock = clock
+        self._key = key
         self._lock = threading.Lock()
-        self._cached: Settings | None = None
-        self._at = 0.0
+        self._cache: dict[str, tuple[Settings, float, list[str]]] = {}
         self._warned: set[str] = set()
         self._ignored: list[str] = []
+
+    def _profile(self) -> str:
+        try:
+            return self._key()
+        except Exception:  # outside Hermes there is one set of settings
+            return ""
 
     def ignored(self) -> list[str]:
         """Settings the last read could not use (shown by /fledge doctor so a typo isn't silent)."""
         self.get()
         with self._lock:
-            return list(self._ignored)
+            entry = self._cache.get(self._profile())
+            return list(entry[2]) if entry else []
 
     def _warn_once(self, message: str) -> None:
         self._ignored.append(message.removeprefix("fledge: "))
@@ -137,12 +145,15 @@ class SettingsLoader:
     def get(self) -> Settings:
         with self._lock:
             now = self._clock()
-            if self._cached is None or now - self._at >= self._ttl:
+            profile = self._profile()
+            entry = self._cache.get(profile)
+            if entry is None or now - entry[1] >= self._ttl:
                 self._ignored = []
-                self._cached = build_settings(self._getter, self._warn_once)
-                self._at = now
-            return self._cached
+                settings = build_settings(self._getter, self._warn_once)
+                entry = (settings, now, self._ignored)
+                self._cache[profile] = entry
+            return entry[0]
 
     def invalidate(self) -> None:
         with self._lock:
-            self._cached = None
+            self._cache.clear()

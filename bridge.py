@@ -302,13 +302,19 @@ class HermesBridge:
 
     # -- storage -----------------------------------------------------------------------------------------
 
+    def home_key(self) -> str:
+        """Names the profile being served right now. One Hermes process can serve several profiles and
+        switches the active home per call, so anything Fledge keeps per profile is keyed by this."""
+        from hermes_constants import get_hermes_home
+        return str(get_hermes_home())
+
     def connect_db(self) -> sqlite3.Connection:
+        """Open the active profile's database through Hermes' plugin storage, and only through it: a
+        path built here from the environment could belong to another profile than the one being served.
+        If storage is unavailable this raises, and the caller lets the write through."""
         try:
             from plugins.plugin_storage import plugin_db
             return plugin_db(PLUGIN_NAME)
         except Exception as exc:
             self._fail("plugin storage", exc)
-            home = Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes")
-            folder = home / "plugin-data" / PLUGIN_NAME
-            folder.mkdir(parents=True, exist_ok=True)
-            return sqlite3.connect(folder / "data.db", check_same_thread=False)
+            raise

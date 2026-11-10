@@ -20,13 +20,6 @@ def test_bridge_degrades_without_hermes(isolated_home, tmp_path):
     assert caps and all(state != "ok" for state in caps.values())
 
 
-def test_storage_falls_back_to_hermes_home(isolated_home):
-    conn = HermesBridge().connect_db()
-    conn.execute("CREATE TABLE t (x)")
-    conn.close()
-    assert (isolated_home / "plugin-data" / "fledge" / "data.db").is_file()
-
-
 def test_hash_fallback_is_stable_and_content_sensitive(tmp_path):
     skill = tmp_path / "lights"
     skill.mkdir()
@@ -135,3 +128,74 @@ def test_a_staged_write_missing_from_disk_is_not_reported_as_held(monkeypatch):
     assert "pending queue" in bridge._failures
     stored["abcd1234"] = {"id": "abcd1234"}
     assert HermesBridge().stage_skill_write({"action": "create"}, "s") == "abcd1234"
+
+
+# -- one process, several profiles ---------------------------------------------------------------------
+# A Hermes gateway can serve several profiles in one process: it switches a context-local home per call
+# and ``plugin_db`` follows it. The ``profiles`` fixture stands in for those two Hermes modules.
+
+import pytest
+
+from fledge.ledger import FLEDGLING, Ledger
+from fledge.settings import SettingsLoader
+
+
+def test_each_profile_gets_its_own_ledger(profiles):
+    bridge = HermesBridge()
+    ledger = Ledger(bridge.connect_db, key=bridge.home_key)
+    try:
+        profiles.switch("alpha")
+        ledger.ensure_skill("water-results", FLEDGLING)
+        ledger.add_event("held", "water-results", "alpha's hold")
+
+        profiles.switch("beta")
+        assert ledger.get_skill("water-results") is None  # beta never saw alpha's same-named skill
+        assert ledger.recent_events() == []
+        ledger.ensure_skill("water-results", FLEDGLING)
+        ledger.set_human_tuned("water-results", True)
+
+        profiles.switch("alpha")
+        assert not ledger.get_skill("water-results")["human_tuned"]  # beta's hand-edit flag stayed in beta
+        assert [e["detail"] for e in ledger.recent_events()] == ["alpha's hold"]
+    finally:
+        ledger.close()
+    for name in ("alpha", "beta"):
+        assert (profiles.root / name / "plugin-data" / "fledge" / "data.db").is_file()
+
+
+def test_closing_the_ledger_closes_every_profile(profiles):
+    bridge = HermesBridge()
+    ledger = Ledger(bridge.connect_db, key=bridge.home_key)
+    for name in ("alpha", "beta"):
+        profiles.switch(name)
+        ledger.ensure_skill("s")
+    ledger.close()
+    for name in ("alpha", "beta"):  # no handle left open: the files can be removed (matters on Windows)
+        (profiles.root / name / "plugin-data" / "fledge" / "data.db").unlink()
+
+
+def test_storage_never_guesses_a_path_from_the_environment(isolated_home):
+    """Without Hermes' plugin storage there is no database: a path built from HERMES_HOME could belong to
+    another profile than the one being served."""
+    bridge = HermesBridge()
+    with pytest.raises(Exception):
+        bridge.connect_db()
+    assert not (isolated_home / "plugin-data").exists()
+    assert bridge.capabilities()["plugin storage"] != "ok"
+
+
+def test_settings_are_read_per_profile(profiles):
+    """The settings cache is per profile too: one profile's ``mode: off`` must not leak to the next call."""
+    bridge = HermesBridge()
+    config = {str(profiles.root / "alpha"): {"mode": "off"}, str(profiles.root / "beta"): {"mode": "enforce"}}
+
+    def getter(key, default=None):
+        return config[bridge.home_key()].get(key, default)
+
+    loader = SettingsLoader(getter, ttl=3600.0, key=bridge.home_key)
+    profiles.switch("alpha")
+    assert loader.get().mode == "off"
+    profiles.switch("beta")
+    assert loader.get().mode == "enforce"
+    profiles.switch("alpha")
+    assert loader.get().mode == "off"
