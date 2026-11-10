@@ -2,7 +2,8 @@
 
 Nothing here is a self-report. Every line comes from a command that was run, a log line, or the session DB of
 a real sandbox session. No ledger rows were written by hand, no hooks were called directly, and every failure
-was a real one (an actual exit 1, an actual user message). Raw output: [tests/smoke-2026-11-05.txt](tests/smoke-2026-11-05.txt).
+was a real one (an actual exit 1, an actual user message). Raw output: [tests/smoke-2026-11-05.txt](tests/smoke-2026-11-05.txt)
+and [tests/profiles-2026-11-10.txt](tests/profiles-2026-11-10.txt).
 
 Rules (checked 2026-11-05 against [the announcement](https://x.com/NousResearch/status/2118094256438936062)):
 cutoff 5 PM EST Wed Nov 11 (22:00 UTC) · entry = catalog PR + demo video on X tagging @NousResearch, under 90 s ·
@@ -14,7 +15,8 @@ both links in the form · no label or title tag required.
 |---|---|
 | OS | Windows 11, ARM64 (native) |
 | Hermes validated | **v0.23.0** (current release, tag commit `2bd378ed`, 2026-11-05) and **v0.22.7** (`b200f5bc60e3`, 2026-11-03, the `requires_hermes` floor) |
-| Python | tests: 3.14 and 3.11.16 (150 passed on both); Hermes runtime: CPython 3.14 ARM64 |
+| Python | tests: 3.14 and 3.11.16 (153 passed on both); Hermes runtime: CPython 3.14 ARM64 |
+| Hermes v0.23.1 | released 2026-11-10 (`3b421578`). Checked that day with `plugins doctor --ci`, `plugins validate --install-deps` and the profile check in section 4c. No live model session was run on 0.23.1. |
 | How | separate read-only checkouts of v0.23.0 and v0.22.7 plus throwaway `HERMES_HOME`s (`%USERPROFILE%\fh\n` 0.23.0, `%USERPROFILE%\fh\d` dev and `%USERPROFILE%\fh\m` demo on 0.22.7) outside any real install, each running its own gateway (`gateway.run: … starting this home's gateway beside it`). No real profile was touched. |
 | Model | `glm-5.3` via OpenCode Go (API key; no OAuth tokens copied) |
 | Isolation | `plugins.isolation: in_process` (the 0.22.7 default, `hermes_cli/plugin_isolation.py:3`) |
@@ -26,9 +28,9 @@ both links in the form · no label or title tag required.
 $ python -m pytest tests            # as received (5176ad4)
 93 passed
 $ python -m pytest tests            # Python 3.14
-150 passed in 0.69s
+153 passed in 1.43s
 $ python -m pytest tests            # Python 3.11.16
-150 passed in 0.64s
+153 passed in 1.21s
 ```
 
 Every fix below came with a test that fails without it (checked by stashing the fix and re-running).
@@ -72,7 +74,7 @@ line and signature as in 0.22.7. These files are byte-identical: `tools/skill_pr
 the review fork) and `tools/approval.py` (approval scopes). `pattern_key=f"plugin_rule:{rule_key}"` and the
 `post_approval_response` call are unchanged, and a timed-out prompt still reports `choice="timeout"`.
 
-## 3. Real loader (on 0.23.0 and 0.22.7)
+## 3. Real loader (on 0.23.1, 0.23.0 and 0.22.7)
 
 ```
 $ hermes plugins doctor . --ci
@@ -94,7 +96,8 @@ is runtime rebinds, and `no core override` passes. `--install-deps` also passed.
 dependencies; on Windows the isolated-runtime copy hits MAX_PATH on Hermes' own vendored test fixtures, which
 is a Hermes issue. The catalog entry, with placeholders filled, passes `scripts/validate_plugin_catalog.py`
 from both v0.22.7 and current `main`: `OK: 1 file(s) valid`. The same `doctor --ci` and `validate` output on
-0.23.0 is in the smoke log.
+0.23.0 is in the smoke log. Re-run on 2026-11-10 after the profile fix (section 4c), on 0.23.1, 0.23.0 and
+0.22.7: same result, same warnings (`hermes_constants`, used for the profile key, is a documented module).
 
 ## 4a. Live on Hermes 0.23.0 (installed from GitHub)
 
@@ -227,6 +230,27 @@ a bad-run save was attempted.
   `last_patched_at=2026-11-06T00:15:15Z → last_written_by_hermes: True`. After a real hand edit of
   another skill, it returned `False`.
 
+## 4c. Several profiles in one process (0.23.1, 0.23.0, 0.22.7)
+
+One Hermes process can serve several profiles: it switches a context-local home per call
+(`hermes_constants.set_hermes_home_override`; the comment at `agent/agent_init.py:634` in 0.23.0 and 0.22.7,
+`:617` in 0.23.1, says a Desktop serve backend builds agents for several profiles inside it) and `plugins.plugin_storage.plugin_db` follows that home on every call
+(`plugins/plugin_storage.py:27-46`). Fledge opened its database once and kept it.
+
+`tests/live/profiles_check.py` runs Fledge's real bridge and ledger against those two real Hermes pieces,
+with three throwaway homes. Raw output: [tests/profiles-2026-11-10.txt](tests/profiles-2026-11-10.txt).
+
+| | before (`ac65b41`) | after |
+|---|---|---|
+| second profile sees the first profile's same-named skill | ❌ yes | ✅ no |
+| second profile sees the first profile's events | ❌ yes | ✅ no |
+| one profile's hand-edit flag reaches the other | ❌ yes | ✅ no |
+| two profiles writing at once from two threads | ❌ 121 rows in the first file, 0 in the second | ✅ 61 rows in each file |
+| anything written to the launch home | ✅ no | ✅ no |
+
+After the fix: 7/7 on Hermes 0.23.1, 0.23.0 and 0.22.7. This is a script against Hermes' real profile
+switch and storage, not a live gateway serving two profiles; that was not run.
+
 ## Bugs found and fixed
 
 Found live on Hermes 0.22.7:
@@ -255,6 +279,10 @@ Found in code review (each confirmed by running the code first, then fixed with 
 9. **Autonomous deletes of hand-edited skills weren't treated as proposals.** `de9fd06`
 10. **The birth turn counted as a use, and turns recorded before `mode off` could still ground skills later.** `02ed639`
 11. **A bare `No.` / `nope` scored as a strong correction.** It is now a weak signal. `f427c61`
+
+Found in catalog review (teknium1, PR #149856), reproduced first, then fixed with tests:
+
+22. **One database for every profile in the process.** The ledger opened `plugin_db("fledge")` once and kept the connection, so in a process serving several profiles each profile's holds, probation counts and hand-edit flags went to whichever profile opened it first, and one profile's history could ground or archive another profile's same-named skill. The ledger now keeps one connection per profile home (`str(get_hermes_home())`), the settings cache is per profile, and the `HERMES_HOME` environment fallback in `bridge.connect_db` is gone: storage goes only through `plugin_db`. Section 4c.
 
 ## Known limits (documented in README)
 

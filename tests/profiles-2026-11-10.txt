@@ -1,0 +1,60 @@
+Fledge: one Hermes process, several profiles. Raw output, 2026-11-10 (Windows 11 ARM64).
+
+What ran: tests/live/profiles_check.py with each Hermes checkout's own interpreter. It uses Hermes' real
+hermes_constants.set_hermes_home_override (the context-local switch a gateway uses to serve several
+profiles from one process) and the real plugins.plugin_storage.plugin_db, with three throwaway homes in a
+temp directory: a "launch" home in the HERMES_HOME environment variable and two profile homes selected only
+through the override. It is a check of Fledge's storage against Hermes' real profile switch, run as a
+script; it is not a live gateway serving two profiles.
+
+First run: the plugin as pinned before this fix (ac65b41). Then the fixed plugin on Hermes 0.23.1, 0.23.0
+and 0.22.7 (0.22.7 with PYTHONPATH set to its checkout).
+
+$ cd hermes-0.23.0 && .venv/Scripts/python.exe <fledge>/tests/live/profiles_check.py <fledge at ac65b41, before the fix>
+hermes at hermes-0.23.0; plugin at fledge-old; ledger keyed by profile: False
+FAIL  beta does not see alpha's same-named skill
+FAIL  beta does not see alpha's events
+FAIL  beta's hand-edit flag did not reach alpha
+PASS  concurrent writers raised nothing
+FAIL  alpha's file holds only alpha's skills  [121 rows]
+FAIL  beta's file holds only beta's skills  [0 rows]
+PASS  nothing was written to the launch home
+2/7 checks passed
+exit=1
+
+$ cd hermes-0.23.1 && .venv/Scripts/python.exe <fledge>/tests/live/profiles_check.py <fledge>
+hermes at hermes-0.23.1; plugin at hermes-fledge; ledger keyed by profile: True
+PASS  beta does not see alpha's same-named skill
+PASS  beta does not see alpha's events
+PASS  beta's hand-edit flag did not reach alpha
+PASS  concurrent writers raised nothing
+PASS  alpha's file holds only alpha's skills  [61 rows]
+PASS  beta's file holds only beta's skills  [61 rows]
+PASS  nothing was written to the launch home
+7/7 checks passed
+exit=0
+
+$ cd hermes-0.23.0 && .venv/Scripts/python.exe <fledge>/tests/live/profiles_check.py <fledge>
+hermes at hermes-0.23.0; plugin at hermes-fledge; ledger keyed by profile: True
+PASS  beta does not see alpha's same-named skill
+PASS  beta does not see alpha's events
+PASS  beta's hand-edit flag did not reach alpha
+PASS  concurrent writers raised nothing
+PASS  alpha's file holds only alpha's skills  [61 rows]
+PASS  beta's file holds only beta's skills  [61 rows]
+PASS  nothing was written to the launch home
+7/7 checks passed
+exit=0
+
+$ cd hermes-0.22.7 && .venv/Scripts/python.exe <fledge>/tests/live/profiles_check.py <fledge>
+hermes at hermes-0.22.7; plugin at hermes-fledge; ledger keyed by profile: True
+PASS  beta does not see alpha's same-named skill
+PASS  beta does not see alpha's events
+PASS  beta's hand-edit flag did not reach alpha
+PASS  concurrent writers raised nothing
+PASS  alpha's file holds only alpha's skills  [61 rows]
+PASS  beta's file holds only beta's skills  [61 rows]
+PASS  nothing was written to the launch home
+7/7 checks passed
+exit=0
+

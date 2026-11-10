@@ -123,7 +123,7 @@ Where no public plugin seam exists yet, Fledge calls the same functions Hermes' 
 ## Disclosure
 
 - **Reads:** hook payloads (tool names, statuses and error text, turn outcome, the first 280 characters of your next message to spot a correction), and skill folders, to fingerprint them.
-- **Writes:** its own SQLite file `<HERMES_HOME>/plugin-data/fledge/data.db` (skill names, fingerprints, verdict reasons, session/turn ids). Verdict reasons quote short excerpts: the matched correction phrase (up to 60 characters) and a failing tool's error text (up to 80); hold summaries include the skill's one-line `description`. No other message text and no skill bodies. held writes into Hermes' pending queue `<HERMES_HOME>/pending/skills/`, and — only for skills Hermes created on its own that get grounded — an archive move into `skills/.archive/` (undo with `hermes curator restore NAME`). With `on_hand_edit: lock`, Hermes' content-lock flag.
+- **Writes:** its own SQLite file `<HERMES_HOME>/plugin-data/fledge/data.db`, one per profile and opened only through Hermes' plugin storage (skill names, fingerprints, verdict reasons, session/turn ids). Verdict reasons quote short excerpts: the matched correction phrase (up to 60 characters) and a failing tool's error text (up to 80); hold summaries include the skill's one-line `description`. No other message text and no skill bodies. held writes into Hermes' pending queue `<HERMES_HOME>/pending/skills/`, and — only for skills Hermes created on its own that get grounded — an archive move into `skills/.archive/` (undo with `hermes curator restore NAME`). With `on_hand_edit: lock`, Hermes' content-lock flag.
 - **Never:** network calls, model calls, credentials, shell commands, background processes, telemetry.
 - **Approvals:** Fledge only adds friction. It can block a skill write or ask you about it through Hermes' approval prompt; it never approves anything, and asks are queued instead of waiting when nobody can answer (cron, kanban, API).
 
@@ -139,7 +139,7 @@ Where no public plugin seam exists yet, Fledge calls the same functions Hermes' 
 ## Development
 
 ```bash
-python -m pytest tests          # 150 tests, no Hermes install needed (Hermes surfaces are faked)
+python -m pytest tests          # 153 tests, no Hermes install needed (Hermes surfaces are faked)
 hermes plugins doctor . --ci    # real discovery, register(), hooks — in a temp HERMES_HOME
 hermes plugins validate .       # catalog admission checks
 ```

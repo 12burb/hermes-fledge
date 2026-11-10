@@ -41,3 +41,12 @@ Validated against Hermes v0.22.7 before release (see VALIDATION.md), which chang
 - A skill deleted before its use is judged is not re-created in the ledger; `/fledge reject` logs `rejected`;
   `/fledge diff|approve|reject` accept any id in Hermes' queue.
 - `/fledge doctor` reports archive and content lock separately (the lock needs Hermes 0.22.7).
+
+Changed after the first catalog review (2026-11-10):
+
+- One Hermes process can serve several profiles. The ledger now keeps one database connection per profile
+  home instead of one for the life of the process, and the settings cache is per profile, so a profile
+  never reads or writes another profile's holds, probation counts or hand-edit flags.
+- Storage goes only through `plugins.plugin_storage.plugin_db`. The fallback that built a path from the
+  `HERMES_HOME` environment variable is gone: without Hermes' plugin storage there is no database, and
+  the gate lets the write through.
