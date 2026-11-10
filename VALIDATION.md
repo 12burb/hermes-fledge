@@ -16,7 +16,7 @@ both links in the form · no label or title tag required.
 | OS | Windows 11, ARM64 (native) |
 | Hermes validated | **v0.23.0** (current release, tag commit `2bd378ed`, 2026-11-05) and **v0.22.7** (`b200f5bc60e3`, 2026-11-03, the `requires_hermes` floor) |
 | Python | tests: 3.14 and 3.11.16 (153 passed on both); Hermes runtime: CPython 3.14 ARM64 |
-| Hermes v0.23.1 | released 2026-11-10 (`3b421578`). Checked that day with `plugins doctor --ci`, `plugins validate --install-deps` and the profile check in section 4c. No live model session was run on 0.23.1. |
+| Hermes v0.23.1 | released 2026-11-10 (`3b421578`). Checked that day with `plugins doctor --ci`, `plugins validate --install-deps`, the profile check in section 4c and one live session (the bad-run hold, section 4d). The other beats were not re-run on 0.23.1. |
 | How | separate read-only checkouts of v0.23.0 and v0.22.7 plus throwaway `HERMES_HOME`s (`%USERPROFILE%\fh\n` 0.23.0, `%USERPROFILE%\fh\d` dev and `%USERPROFILE%\fh\m` demo on 0.22.7) outside any real install, each running its own gateway (`gateway.run: … starting this home's gateway beside it`). No real profile was touched. |
 | Model | `glm-5.3` via OpenCode Go (API key; no OAuth tokens copied) |
 | Isolation | `plugins.isolation: in_process` (the 0.22.7 default, `hermes_cli/plugin_isolation.py:3`) |
@@ -250,6 +250,21 @@ with three throwaway homes. Raw output: [tests/profiles-2026-11-10.txt](tests/pr
 
 After the fix: 7/7 on Hermes 0.23.1, 0.23.0 and 0.22.7. This is a script against Hermes' real profile
 switch and storage, not a live gateway serving two profiles; that was not run.
+
+## 4d. Live again after the profile fix (2026-11-10)
+
+The fix changes how Fledge opens its database, so the bad-run beat was run again in real sessions with a real
+model (`glm-5.3`), with the plugin at `084a8ba`: `Run ./fetch_water.sh and turn what it returns into
+results.csv. The server is flaky, so retry once if it fails.`, then
+`/refine save the procedure for pulling water results as a skill`.
+
+| Hermes | What happened | Ledger |
+|---|---|---|
+| **0.23.1** (new throwaway home) | the pull failed twice with the 404; the review's save was held | hold `7e5c2397`, kind `bad_run`, origin `review`, skill `water-results-fetch`; listed by `/fledge pending`; rejected afterwards |
+| **0.23.0** (the existing sandbox home, with its earlier history) | same | hold `9989e2c1`, kind `bad_run`, origin `review`, skill `water-results-pull`; rejected afterwards |
+
+On 0.23.0, `hermes fledge status` printed the same records before and after the update (same database, new
+code path), and `hermes fledge doctor` showed 6 of 6 ok on both.
 
 ## Bugs found and fixed
 
